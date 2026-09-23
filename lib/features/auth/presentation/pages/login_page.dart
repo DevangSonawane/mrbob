@@ -81,7 +81,10 @@ class LoginPage extends StatelessWidget {
   void _enterApp(BuildContext context) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const MainShell()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: MainShell.routeName),
+        builder: (_) => const MainShell(),
+      ),
     );
   }
 }

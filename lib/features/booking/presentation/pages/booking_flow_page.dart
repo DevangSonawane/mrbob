@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../widgets/payment_option.dart';
 import '../widgets/price_breakdown.dart';
 import 'booking_success_page.dart';
@@ -48,18 +49,26 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
           Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.radiusCard),
+              side: const BorderSide(color: AppColors.borderSubtle),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
-                    width: 54,
-                    height: 54,
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       color: widget.service.color,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Icon(widget.service.icon),
+                    child: Icon(
+                      widget.service.icon,
+                      color: AppColors.brandForest,
+                      size: 26,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -69,12 +78,21 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
                         Text(
                           widget.service.title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: AppColors.brandForest,
+                            letterSpacing: -0.3,
+                            height: 1.1,
                           ),
                         ),
+                        const SizedBox(height: 3),
                         Text(
-                          '${widget.service.duration} service from Rs ${widget.service.price}',
+                          '${widget.service.duration} · from Rs ${widget.service.price}',
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
@@ -88,7 +106,7 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             'When do you need this?',
             style: Theme.of(
               context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
           SegmentedButton<String>(
@@ -143,7 +161,7 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             'A few details',
             style: Theme.of(
               context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
           ...widget.service.questions.indexed.map(
@@ -164,7 +182,7 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             'Payment',
             style: Theme.of(
               context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
           PaymentOption(
@@ -207,11 +225,21 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
                     Text(
                       'Rs $total',
                       style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.brandForest,
+                        letterSpacing: -0.3,
                       ),
                     ),
-                    Text('$mode - $slot', overflow: TextOverflow.ellipsis),
+                    Text(
+                      '$mode - $slot',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -223,6 +251,9 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
                     slot: slot,
                     payment: payment,
                     total: total,
+                    status: mode == 'Instant'
+                        ? BookingStatus.inService
+                        : BookingStatus.confirmed,
                   );
                   Navigator.pushReplacement(
                     context,

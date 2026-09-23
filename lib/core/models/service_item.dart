@@ -10,6 +10,7 @@ class ServiceItem {
     required this.questions,
     required this.badge,
     required this.color,
+    this.supportsInstant = false,
   });
 
   final String title;
@@ -20,4 +21,10 @@ class ServiceItem {
   final List<String> questions;
   final String badge;
   final Color color;
+
+  /// Whether the service can be fulfilled instantly ("now").
+  ///
+  /// Small, self-contained jobs default to scheduled-only; each
+  /// instant-capable service opts in explicitly in [services].
+  final bool supportsInstant;
 }

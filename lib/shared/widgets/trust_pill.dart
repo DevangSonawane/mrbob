@@ -15,7 +15,8 @@ class TrustPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

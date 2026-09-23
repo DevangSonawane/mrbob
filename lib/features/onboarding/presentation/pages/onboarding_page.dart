@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/brand_mark.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 
+/// Premium 2026 home-services onboarding.
+///
+/// Market pattern (Urban Company / Thumbtack / Taskrabbit):
+/// - clean white canvas, no baked waves or full-bleed stretched art
+/// - hero lives inside a rounded card so photography feels contained
+/// - one clear headline, muted body, slim segmented progress
+/// - single dark CTA with one gold arrow affordance
+///
+/// The existing assets are good illustrations but they ship with a baked
+/// yellow/green wave footer (~bottom 18%). We deliberately crop that off
+/// in-code with [BoxFit.cover] + topCenter alignment inside a fixed card,
+/// so the design you liked stays, minus the cheap-looking wave.
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -14,23 +28,30 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final controller = PageController();
   int index = 0;
 
-  final pages = const [
-    _OnboardingStep(
-      imagePath: 'assets/postfix_onboarding/1.png',
+  static const _steps = [
+    _StepData(
+      imagePath: 'assets/mrbob_onboarding/1.png',
+      eyebrow: 'Electrical',
       title: 'Expert fixes at your doorstep',
       body:
-          'Book verified electricians for safe switch, wiring and panel repairs.',
+          'Book verified electricians for safe switch, wiring and panel repairs — upfront pricing, on-time arrival.',
+      chip: 'Verified electricians',
     ),
-    _OnboardingStep(
-      imagePath: 'assets/postfix_onboarding/2.png',
+    _StepData(
+      imagePath: 'assets/mrbob_onboarding/2.png',
+      eyebrow: 'Plumbing',
       title: 'Plumbing help, right on time',
-      body: 'Get trained pros for leaks, fittings and bathroom repair work.',
+      body:
+          'Get trained pros for leaks, fittings and bathroom repairs, with photo diagnosis before the visit.',
+      chip: 'Same-day slots',
     ),
-    _OnboardingStep(
-      imagePath: 'assets/postfix_onboarding/3.png',
+    _StepData(
+      imagePath: 'assets/mrbob_onboarding/3.png',
+      eyebrow: 'Paint & finish',
       title: 'Fresh finishes after move-in',
       body:
-          'Handle paint touch-ups and post-construction snags without contractor chaos.',
+          'Handle paint touch-ups and post-construction snags without contractor chaos. One booking, done right.',
+      chip: 'Move-in ready',
     ),
   ];
 
@@ -40,61 +61,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          PageView(
-            controller: controller,
-            onPageChanged: (value) => setState(() => index = value),
-            children: pages,
-          ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6, right: 14),
-                child: TextButton(
-                  onPressed: _finish,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.brandForest,
-                    backgroundColor: Colors.white.withValues(alpha: 0.7),
-                    minimumSize: const Size(56, 34),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    visualDensity: VisualDensity.compact,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text('Skip'),
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
-                child: _OnboardingControls(
-                  title: pages[index].title,
-                  body: pages[index].body,
-                  index: index,
-                  pageCount: pages.length,
-                  onNext: index == pages.length - 1
-                      ? _finish
-                      : () => controller.nextPage(
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOut,
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void _goNext() {
+    if (index == _steps.length - 1) {
+      _finish();
+    } else {
+      controller.nextPage(
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _finish() {
@@ -103,266 +78,488 @@ class _OnboardingPageState extends State<OnboardingPage> {
       MaterialPageRoute(builder: (_) => const LoginPage()),
     );
   }
-}
-
-class _OnboardingControls extends StatelessWidget {
-  const _OnboardingControls({
-    required this.title,
-    required this.body,
-    required this.index,
-    required this.pageCount,
-    required this.onNext,
-  });
-
-  final String title;
-  final String body;
-  final int index;
-  final int pageCount;
-  final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height;
-    final isTight = height < 700;
-    final titleSize = isTight ? 27.0 : 31.0;
-    final bodySize = isTight ? 14.0 : 15.5;
-    final textSpacing = isTight ? 10.0 : 12.0;
-    final progressSpacing = isTight ? 20.0 : 26.0;
-    final buttonSpacing = isTight ? 20.0 : 26.0;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.white),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _Header(isLast: index == _steps.length - 1, onSkip: _finish),
+              Expanded(
+                child: PageView.builder(
+                  controller: controller,
+                  itemCount: _steps.length,
+                  physics: const BouncingScrollPhysics(),
+                  onPageChanged: (value) => setState(() => index = value),
+                  itemBuilder: (context, i) => _StepBody(step: _steps[i]),
+                ),
+              ),
+              _Footer(
+                index: index,
+                pageCount: _steps.length,
+                title: _steps[index].title,
+                body: _steps[index].body,
+                eyebrow: _steps[index].eyebrow,
+                onNext: _goNext,
+                onBack: () => controller.previousPage(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeOutCubic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
+class _StepData {
+  const _StepData({
+    required this.imagePath,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    required this.chip,
+  });
+
+  final String imagePath;
+  final String eyebrow;
+  final String title;
+  final String body;
+  final String chip;
+}
+
+// ---------------------------------------------------------------- header
+
+class _Header extends StatelessWidget {
+  const _Header({required this.isLast, required this.onSkip});
+
+  final bool isLast;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
+      child: Row(
+        children: [
+          const BrandMark(size: 34),
+          const SizedBox(width: 10),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'MrBob',
+                style: TextStyle(
+                  color: AppColors.brandForest,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                  height: 1.1,
+                ),
+              ),
+              Text(
+                'Home services, done right',
+                style: TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          // Ghost skip — no frosted pill floating over photography.
+          TextButton(
+            onPressed: onSkip,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.mutedText,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: Text(isLast ? 'Done' : 'Skip'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- page body
+
+class _StepBody extends StatelessWidget {
+  const _StepBody({required this.step});
+
+  final _StepData step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Column(
+        children: [Expanded(child: _HeroCard(step: step))],
+      ),
+    );
+  }
+}
+
+/// Contained hero card — this is the core "un-zoomed + premium" fix.
+///
+/// The source PNGs are tall portraits with a baked wave footer. By fixing
+/// the card height (flex) and using cover+topCenter, Flutter scales the
+/// image to fill the width and crops the bottom wave away. Nothing is
+/// stretched, faces stay in frame, edges get a soft premium treatment.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.step});
+
+  final _StepData step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceTint,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 28,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Top-anchored so the baked bottom wave is the first thing
+            // cropped out on every screen size.
+            Image.asset(
+              step.imagePath,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              filterQuality: FilterQuality.high,
+            ),
+            // Soft bottom scrim so the floating chip always reads well,
+            // without the old full-screen white wash that looked muddy.
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0.62, 1.0],
+                  colors: [Color(0x00000000), Color(0x140D230D)],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.star_rounded,
+                      size: 14,
+                      color: AppColors.brandForest,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      '4.8 · Trusted pros',
+                      style: TextStyle(
+                        color: AppColors.brandForest,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandForest,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: const BoxDecoration(
+                            color: AppColors.brandGold,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 11,
+                            color: AppColors.brandForest,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Text(
+                          step.chip,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- footer
+
+class _Footer extends StatelessWidget {
+  const _Footer({
+    required this.index,
+    required this.pageCount,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    required this.onNext,
+    required this.onBack,
+  });
+
+  final int index;
+  final int pageCount;
+  final String eyebrow;
+  final String title;
+  final String body;
+  final VoidCallback onNext;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLast = index == pageCount - 1;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 12 + bottomInset * 0.5),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween(
+                  begin: const Offset(0.08, 0),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
             child: Column(
               key: ValueKey(title),
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 2.5,
+                      decoration: BoxDecoration(
+                        color: AppColors.brandGold,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      eyebrow.toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  style: const TextStyle(
                     color: AppColors.brandForest,
-                    fontSize: titleSize,
-                    fontWeight: FontWeight.w900,
-                    height: 1.08,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6,
+                    height: 1.12,
                   ),
                 ),
-                SizedBox(height: textSpacing),
+                const SizedBox(height: 8),
                 Text(
                   body,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  style: const TextStyle(
                     color: AppColors.mutedText,
-                    fontSize: bodySize,
-                    height: 1.35,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    height: 1.5,
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        SizedBox(height: progressSpacing),
-        _ProgressPill(index: index, pageCount: pageCount, isTight: isTight),
-        SizedBox(height: buttonSpacing),
-        _BottomActionButton(
-          isLast: index == pageCount - 1,
-          isTight: isTight,
-          onPressed: onNext,
-        ),
-      ],
-    );
-  }
-}
-
-class _ProgressPill extends StatelessWidget {
-  const _ProgressPill({
-    required this.index,
-    required this.pageCount,
-    required this.isTight,
-  });
-
-  final int index;
-  final int pageCount;
-  final bool isTight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: isTight ? 70 : 78,
-      height: isTight ? 12 : 13,
-      padding: const EdgeInsets.all(2.5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF121C1A),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        children: List.generate(
-          pageCount,
-          (dot) => Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              margin: EdgeInsets.only(right: dot == pageCount - 1 ? 0 : 3),
-              decoration: BoxDecoration(
-                color: dot <= index ? AppColors.brandGold : Colors.white,
-                borderRadius: BorderRadius.circular(999),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: List.generate(
+                    pageCount,
+                    (dot) => Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        height: 4,
+                        margin: EdgeInsets.only(
+                          right: dot == pageCount - 1 ? 0 : 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: dot <= index
+                              ? AppColors.brandForest
+                              : AppColors.border,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Text(
+                '${(index + 1).toString().padLeft(2, '0')} / ${pageCount.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomActionButton extends StatelessWidget {
-  const _BottomActionButton({
-    required this.isLast,
-    required this.isTight,
-    required this.onPressed,
-  });
-
-  final bool isLast;
-  final bool isTight;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final buttonHeight = isTight ? 58.0 : 64.0;
-    final circleSize = isTight ? 42.0 : 48.0;
-    final iconSize = isTight ? 22.0 : 25.0;
-
-    return SizedBox(
-      width: double.infinity,
-      height: buttonHeight,
-      child: FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFF121C1A),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          shape: const StadiumBorder(),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                width: circleSize,
-                height: circleSize,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (index > 0)
+                Container(
+                  width: 58,
+                  height: 58,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border),
+                    color: Colors.white,
+                  ),
+                  child: IconButton(
+                    onPressed: onBack,
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: AppColors.brandForest,
+                    ),
+                    tooltip: 'Back',
+                  ),
                 ),
-                child: Icon(
-                  Icons.home_repair_service_rounded,
-                  color: AppColors.brandForest,
-                  size: iconSize,
-                ),
-              ),
-            ),
-            Text(
-              isLast ? 'Start' : 'Next',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Container(
-                width: circleSize,
-                height: circleSize,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                  color: AppColors.brandForest,
-                  size: iconSize,
+              Expanded(
+                child: SizedBox(
+                  height: 58,
+                  child: FilledButton(
+                    onPressed: onNext,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandForest,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.only(left: 22, right: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            isLast ? 'Get started' : 'Next',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                            color: AppColors.brandGold,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isLast
+                                ? Icons.check_rounded
+                                : Icons.arrow_forward_rounded,
+                            color: AppColors.brandForest,
+                            size: 20,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OnboardingFade extends StatelessWidget {
-  const _OnboardingFade();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0, 0.38, 0.58, 0.82, 1],
-          colors: [
-            Color(0x00FFFFFF),
-            Color(0x08FFFFFF),
-            Color(0xDFFFFFFF),
-            Color(0xF2FFFFFF),
-            Color(0xCFFFFFFF),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OnboardingImage extends StatelessWidget {
-  const _OnboardingImage({required this.imagePath});
-
-  final String imagePath;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isTight = constraints.maxHeight < 700;
-        final imageWidth = constraints.maxWidth * (isTight ? 0.82 : 0.88);
-
-        return Align(
-          alignment: Alignment.topCenter,
-          child: Image.asset(
-            imagePath,
-            width: imageWidth,
-            fit: BoxFit.fitWidth,
-            alignment: Alignment.topCenter,
+            ],
           ),
-        );
-      },
-    );
-  }
-}
-
-class _OnboardingStep extends StatelessWidget {
-  const _OnboardingStep({
-    required this.imagePath,
-    required this.title,
-    required this.body,
-  });
-
-  final String imagePath;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _OnboardingImage(imagePath: imagePath),
-        const _OnboardingFade(),
-      ],
+        ],
+      ),
     );
   }
 }

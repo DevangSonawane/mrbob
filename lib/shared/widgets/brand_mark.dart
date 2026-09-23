@@ -14,7 +14,7 @@ class BrandMark extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: AppColors.brandForest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
         Icons.build_circle_rounded,

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/brand_mark.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
+/// Matches [EmailLoginPage]: white canvas, brand header, boxed AppTheme
+/// fields, forest 58 CTA with gold arrow — not the old underline form.
 class EmailSignUpPage extends StatefulWidget {
   const EmailSignUpPage({super.key});
 
@@ -16,7 +20,9 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-  bool receivePromos = false;
+  bool obscurePassword = true;
+  bool obscureConfirm = true;
+  bool receivePromos = true;
 
   @override
   void dispose() {
@@ -28,226 +34,413 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
     super.dispose();
   }
 
+  void _enterApp() {
+    FocusScope.of(context).unfocus();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(name: MainShell.routeName),
+        builder: (_) => const MainShell(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final screenSize = mediaQuery.size;
-    final scale = (screenSize.shortestSide / 390).clamp(0.82, 1.0);
-    final isTight = screenSize.height < 760;
-    final horizontalPadding = 20.0 * scale;
-    final backButtonSize = 44.0 * scale;
-    final titleSize = 22.0 * scale;
-    final inputSize = 16.0 * scale;
-    final labelSize = 11.0 * scale;
-    final helperSize = 14.0 * scale;
-    final buttonHeight = 46.0 * scale;
-
     return Scaffold(
-      resizeToAvoidBottomInset: true,
-      backgroundColor: const Color(0xFFFAFAFA),
-      body: MediaQuery(
-        data: mediaQuery.copyWith(textScaler: TextScaler.noScaling),
+      backgroundColor: Colors.white,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.white),
         child: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  isTight ? 10 * scale : 14 * scale,
-                  horizontalPadding,
-                  isTight ? 10 * scale : 12 * scale,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 20, 4),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: backButtonSize,
-                      height: backButtonSize,
-                      child: OutlinedButton(
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: IconButton(
                         onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black,
-                          backgroundColor: Colors.white.withValues(alpha: 0.72),
-                          side: const BorderSide(color: Color(0xFFE4E4E4)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14 * scale),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: Icon(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(
                           Icons.chevron_left_rounded,
-                          size: 23 * scale,
+                          color: AppColors.brandForest,
+                          size: 24,
                         ),
                       ),
                     ),
-                    SizedBox(width: 14 * scale),
-                    Expanded(
-                      child: Text(
-                        'Sign Up with E-mail',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              color: Colors.black,
-                              fontSize: titleSize,
-                              fontWeight: FontWeight.w900,
-                            ),
+                    const SizedBox(width: 12),
+                    const BrandMark(size: 32),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'MrBob',
+                      style: TextStyle(
+                        color: AppColors.brandForest,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE4E4E4)),
               Expanded(
                 child: SingleChildScrollView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    isTight ? 18 * scale : 22 * scale,
-                    horizontalPadding,
-                    18 * scale,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _AuthTextField(
-                        controller: firstNameController,
-                        label: 'FIRST NAME',
-                        hint: 'Enter your first name',
-                        inputSize: inputSize,
-                        labelSize: labelSize,
-                        scale: scale,
-                        textInputAction: TextInputAction.next,
-                        autofocus: true,
-                      ),
-                      SizedBox(height: 14 * scale),
-                      _AuthTextField(
-                        controller: lastNameController,
-                        label: 'LAST NAME',
-                        hint: 'Enter your last name',
-                        inputSize: inputSize,
-                        labelSize: labelSize,
-                        scale: scale,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      SizedBox(height: 14 * scale),
-                      _AuthTextField(
-                        controller: emailController,
-                        label: 'EMAIL',
-                        hint: 'Enter email address',
-                        inputSize: inputSize,
-                        labelSize: labelSize,
-                        scale: scale,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      SizedBox(height: 14 * scale),
-                      _AuthTextField(
-                        controller: passwordController,
-                        label: 'PASSWORD',
-                        hint: 'Enter your password',
-                        inputSize: inputSize,
-                        labelSize: labelSize,
-                        scale: scale,
-                        obscureText: true,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      SizedBox(height: 14 * scale),
-                      _AuthTextField(
-                        controller: confirmPasswordController,
-                        label: 'CONFIRM PASSWORD',
-                        hint: 'Re-enter your password',
-                        inputSize: inputSize,
-                        labelSize: labelSize,
-                        scale: scale,
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                      ),
-                      SizedBox(height: 16 * scale),
                       Row(
                         children: [
-                          SizedBox(
-                            width: 22 * scale,
-                            height: 22 * scale,
-                            child: Checkbox(
-                              value: receivePromos,
-                              onChanged: (value) {
-                                setState(() {
-                                  receivePromos = value ?? false;
-                                });
-                              },
-                              side: const BorderSide(
-                                color: Colors.black,
-                                width: 1.3,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(3 * scale),
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
+                          Container(
+                            width: 22,
+                            height: 2.5,
+                            decoration: BoxDecoration(
+                              color: AppColors.brandGold,
+                              borderRadius: BorderRadius.circular(999),
                             ),
                           ),
-                          SizedBox(width: 12 * scale),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'CREATE ACCOUNT',
+                            style: TextStyle(
+                              color: AppColors.mutedText,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Sign up with email',
+                        style: TextStyle(
+                          color: AppColors.brandForest,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6,
+                          height: 1.12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'One account for bookings, tracking and faster checkout.',
+                        style: TextStyle(
+                          color: AppColors.mutedText,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      Row(
+                        children: [
                           Expanded(
-                            child: Text(
-                              'I\'d like to receive promotional emails.',
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 13 * scale,
+                            child: _LabeledField(
+                              label: 'First name',
+                              child: TextField(
+                                controller: firstNameController,
+                                textInputAction: TextInputAction.next,
+                                textCapitalization: TextCapitalization.words,
+                                style: const TextStyle(
+                                  color: AppColors.brandForest,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: 'Aarav',
+                                  prefixIcon: Icon(
+                                    Icons.person_outline_rounded,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'Last name',
+                              child: TextField(
+                                controller: lastNameController,
+                                textInputAction: TextInputAction.next,
+                                textCapitalization: TextCapitalization.words,
+                                style: const TextStyle(
+                                  color: AppColors.brandForest,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: 'Sharma',
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: isTight ? 34 * scale : 48 * scale),
-                      Center(
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          children: [
-                            Text(
-                              'Already have account? ',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: const Color(0xFF595959),
-                                    fontSize: helperSize,
-                                  ),
+                      const SizedBox(height: 16),
+                      _LabeledField(
+                        label: 'Email address',
+                        child: TextField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          style: const TextStyle(
+                            color: AppColors.brandForest,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'you@example.com',
+                            prefixIcon: Icon(
+                              Icons.alternate_email_rounded,
+                              size: 20,
                             ),
-                            GestureDetector(
-                              onTap: () => Navigator.pop(context),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _LabeledField(
+                        label: 'Password',
+                        child: TextField(
+                          controller: passwordController,
+                          obscureText: obscurePassword,
+                          textInputAction: TextInputAction.next,
+                          style: const TextStyle(
+                            color: AppColors.brandForest,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Minimum 8 characters',
+                            prefixIcon: const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 20,
+                            ),
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () => obscurePassword = !obscurePassword,
+                              ),
+                              icon: Icon(
+                                obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                size: 20,
+                              ),
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _LabeledField(
+                        label: 'Confirm password',
+                        child: TextField(
+                          controller: confirmPasswordController,
+                          obscureText: obscureConfirm,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _enterApp(),
+                          style: const TextStyle(
+                            color: AppColors.brandForest,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Re-enter your password',
+                            prefixIcon: const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 20,
+                            ),
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () => obscureConfirm = !obscureConfirm,
+                              ),
+                              icon: Icon(
+                                obscureConfirm
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                size: 20,
+                              ),
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Promo opt-in as a card, not a bare checkbox row.
+                      GestureDetector(
+                        onTap: () =>
+                            setState(() => receivePromos = !receivePromos),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 13,
+                          ),
+                          decoration: BoxDecoration(
+                            color: receivePromos
+                                ? AppColors.surfaceTint
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(
+                              AppColors.radiusCard,
+                            ),
+                            border: Border.all(
+                              color: receivePromos
+                                  ? AppColors.brandGold
+                                  : AppColors.borderSubtle,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: receivePromos
+                                      ? AppColors.brandForest
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: Border.all(
+                                    color: receivePromos
+                                        ? AppColors.brandForest
+                                        : AppColors.border,
+                                    width: 1.4,
+                                  ),
+                                ),
+                                child: receivePromos
+                                    ? const Icon(
+                                        Icons.check_rounded,
+                                        size: 14,
+                                        color: Colors.white,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Email me offers and booking updates',
+                                  style: TextStyle(
+                                    color: AppColors.brandForest,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  12 + MediaQuery.paddingOf(context).bottom * 0.4,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 58,
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _enterApp,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.brandForest,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.only(left: 22, right: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Expanded(
                               child: Text(
-                                'Sign In',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      color: const Color(0xFF24A848),
-                                      fontSize: helperSize,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                'Create account',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                color: AppColors.brandGold,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: AppColors.brandForest,
+                                size: 20,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      SizedBox(height: isTight ? 18 * scale : 22 * scale),
-                      SizedBox(
-                        width: double.infinity,
-                        height: buttonHeight,
-                        child: FilledButton(
-                          onPressed: _enterApp,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.brandGold,
-                            foregroundColor: Colors.black,
-                            shape: const StadiumBorder(),
-                            textStyle: TextStyle(
-                              fontSize: 15 * scale,
-                              fontWeight: FontWeight.w500,
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Already have an account? ',
+                          style: TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: const Text(
+                            'Sign in',
+                            style: TextStyle(
+                              color: AppColors.brandForest,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              decoration: TextDecoration.underline,
+                              decorationColor: AppColors.brandGold,
+                              decorationThickness: 2,
                             ),
                           ),
-                          child: const Text('Create an account'),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'By continuing you agree to Terms & Privacy Policy',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 11,
+                        height: 1.4,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -256,39 +449,13 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
       ),
     );
   }
-
-  void _enterApp() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainShell()),
-    );
-  }
 }
 
-class _AuthTextField extends StatelessWidget {
-  const _AuthTextField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.inputSize,
-    required this.labelSize,
-    required this.scale,
-    this.keyboardType,
-    this.textInputAction,
-    this.obscureText = false,
-    this.autofocus = false,
-  });
+class _LabeledField extends StatelessWidget {
+  const _LabeledField({required this.label, required this.child});
 
-  final TextEditingController controller;
   final String label;
-  final String hint;
-  final double inputSize;
-  final double labelSize;
-  final double scale;
-  final TextInputType? keyboardType;
-  final TextInputAction? textInputAction;
-  final bool obscureText;
-  final bool autofocus;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -297,37 +464,15 @@ class _AuthTextField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: labelSize,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
+          style: const TextStyle(
+            color: AppColors.brandForest,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.1,
           ),
         ),
-        TextField(
-          controller: controller,
-          autofocus: autofocus,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          obscureText: obscureText,
-          style: TextStyle(color: Colors.black, fontSize: inputSize),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: hint,
-            hintStyle: TextStyle(
-              color: const Color(0xFF8F8F8F),
-              fontSize: inputSize,
-              fontWeight: FontWeight.w400,
-            ),
-            enabledBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFFCFCFCF)),
-            ),
-            focusedBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.black),
-            ),
-            contentPadding: EdgeInsets.only(top: 8 * scale, bottom: 8 * scale),
-          ),
-        ),
+        const SizedBox(height: 8),
+        child,
       ],
     );
   }

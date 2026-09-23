@@ -1,24 +1,43 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_easy/liquid_glass_easy.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../../core/data/services_data.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../shell/presentation/pages/main_shell.dart';
 
 /// Blinkit-style home:
 /// - Solid gold header (Blinkit's yellow) that COLLAPSES on scroll.
 /// - White search card that STAYS PINNED below the status bar with rounded
 ///   bottom corners, exactly like Blinkit's sticky search bar.
 /// - White body tucked close under the search, clean yellow -> white curve.
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onBooked});
 
+  final ValueChanged<Booking> onBooked;
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   static const _allCategoriesRouteName = '/home/service-categories';
 
-  final ValueChanged<Booking> onBooked;
+  /// View filter for the service collections below. Null shows everything;
+  /// the booking-mode [GlassMenu] in [_SearchBar] sets and clears it.
+  BookingMode? _modeFilter;
+
+  /// Services visible under the current [_modeFilter].
+  List<ServiceItem> get _visibleServices => switch (_modeFilter) {
+    BookingMode.instant => services.where((s) => s.supportsInstant).toList(),
+    BookingMode.scheduled => services.where((s) => !s.supportsInstant).toList(),
+    null => services,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +79,12 @@ class HomePage extends StatelessWidget {
                 // promo + content scroll beneath it) ----
                 SliverPersistentHeader(
                   pinned: true,
-                  delegate: _StickySearchDelegate(scale: scale),
+                  delegate: _StickySearchDelegate(
+                    scale: scale,
+                    modeFilter: _modeFilter,
+                    onModeFilterChanged: (mode) =>
+                        setState(() => _modeFilter = mode),
+                  ),
                 ),
 
                 // ---- 3. Body (scrolls under the sticky search) ----
@@ -86,7 +110,7 @@ class HomePage extends StatelessWidget {
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 18 * scale),
                         child: GridView.builder(
-                          itemCount: services.take(8).length,
+                          itemCount: _visibleServices.take(8).length,
                           shrinkWrap: true,
                           padding: EdgeInsets.zero,
                           physics: const NeverScrollableScrollPhysics(),
@@ -98,7 +122,7 @@ class HomePage extends StatelessWidget {
                                 childAspectRatio: 1,
                               ),
                           itemBuilder: (context, index) {
-                            final service = services[index];
+                            final service = _visibleServices[index];
                             return _CategoryTile(
                               service: service,
                               scale: scale,
@@ -117,7 +141,7 @@ class HomePage extends StatelessWidget {
                         child: _SectionHeader(
                           title: 'Popular Services',
                           onViewAll: () =>
-                              _openService(context, services.first),
+                              _openService(context, _visibleServices.first),
                         ),
                       ),
                       SizedBox(
@@ -125,11 +149,11 @@ class HomePage extends StatelessWidget {
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           padding: EdgeInsets.symmetric(horizontal: 18 * scale),
-                          itemCount: services.length,
+                          itemCount: _visibleServices.length,
                           separatorBuilder: (_, _) =>
                               SizedBox(width: 12 * scale),
                           itemBuilder: (context, index) {
-                            final service = services[index];
+                            final service = _visibleServices[index];
                             return _PopularServiceCard(
                               service: service,
                               scale: scale,
@@ -184,47 +208,44 @@ class HomePage extends StatelessWidget {
   }
 
   Future<void> _openService(BuildContext context, ServiceItem service) async {
-    final openedFromAllCategories =
-        ModalRoute.of(context)?.settings.name == _allCategoriesRouteName;
     final selectedSlot = await _showSlotPicker(context, service);
     if (!context.mounted || selectedSlot == null) {
       return;
     }
 
-    final prepAction = await _showBookingPrepDialog(context, service);
+    final prep = await _showBookingPrepDialog(context, service);
     if (!context.mounted) {
       return;
     }
-    if (prepAction != _BookingPrepAction.continueBooking) {
-      if (prepAction == _BookingPrepAction.diy) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('DIY guide is coming soon.')),
-        );
-      }
+    if (prep == null || prep.action != _BookingPrepAction.continueBooking) {
       return;
     }
 
-    final completed = await Navigator.push<bool>(
+    // Dummy payment step: Pay now records the booking and drops the user
+    // back on the home (first) route.
+    await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => _ServiceQuestionnairePage(
+        builder: (_) => _PaymentPage(
           service: service,
           slotLabel: selectedSlot.label,
+          description: prep.description,
+          onPaid: widget.onBooked,
         ),
       ),
     );
-    if (completed == true && openedFromAllCategories && context.mounted) {
-      Navigator.pop(context);
-    }
   }
 
-  Future<_BookingPrepAction?> _showBookingPrepDialog(
+  Future<_BookingPrepData?> _showBookingPrepDialog(
     BuildContext context,
     ServiceItem service,
   ) {
-    return showDialog<_BookingPrepAction>(
+    // Same bottom dialog for the whole describe flow — not a new centered
+    // dialog. The sheet itself expands in place when the editor opens.
+    return showModalBottomSheet<_BookingPrepData>(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _BookingPrepDialog(service: service),
     );
   }
@@ -281,9 +302,11 @@ class HomePage extends StatelessWidget {
                   Text(
                     service.title,
                     style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      color: AppColors.brandForest,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                      height: 1.15,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -291,99 +314,124 @@ class HomePage extends StatelessWidget {
                     'Day',
                     style: TextStyle(
                       color: AppColors.brandForest,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: days.map((day) {
-                      final selected = selectedDay == day;
-                      return ChoiceChip(
-                        label: Text(day.title),
-                        selected: selected,
-                        showCheckmark: false,
-                        selectedColor: AppColors.brandForest,
-                        backgroundColor: Colors.white,
-                        side: BorderSide(
-                          color: selected
-                              ? AppColors.brandForest
-                              : AppColors.border,
-                        ),
-                        labelStyle: TextStyle(
-                          color: selected
-                              ? Colors.white
-                              : AppColors.brandForest,
-                          fontWeight: selected
-                              ? FontWeight.w900
-                              : FontWeight.w700,
-                        ),
-                        onSelected: (_) =>
-                            setSheetState(() => selectedDay = day),
-                      );
-                    }).toList(),
+                  // Fluid glass day selector (indicator_parity_demo.dart pattern:
+                  // GlassSegmentedControl's refractive indicator morphs between
+                  // segments with jelly physics — the liquid selection pill.
+                  // Standalone on the opaque sheet, so it owns its glass layer
+                  // (SKILL.md Rule 2: glass is never nested in glass).
+                  GlassSegmentedControl(
+                    segments: days
+                        .map((day) => GlassSegment(label: day.title))
+                        .toList(),
+                    selectedIndex: days.indexWhere(
+                      (day) => day.title == selectedDay.title,
+                    ),
+                    onSegmentSelected: (index) =>
+                        setSheetState(() => selectedDay = days[index]),
+                    useOwnLayer: true,
+                    // Opaque-sheet readability: a tinted track plus a solid
+                    // forest indicator pill, so the selection reads even
+                    // though clear glass has nothing to refract on white.
+                    // The refractive lens still morphs over the pill.
+                    backgroundColor: AppColors.brandForest.withValues(
+                      alpha: 0.08,
+                    ),
+                    indicatorColor: AppColors.brandForest,
+                    selectedTextStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                    unselectedTextStyle: TextStyle(
+                      color: AppColors.brandForest.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 18),
-                  Divider(height: 1, color: AppColors.border),
+                  Divider(height: 1, color: AppColors.borderSubtle),
                   const SizedBox(height: 18),
                   const Text(
                     'Time slots',
                     style: TextStyle(
                       color: AppColors.brandForest,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: timeSlots.map((time) {
-                      final selected = selectedTime == time;
-                      return ChoiceChip(
-                        label: Text(time),
-                        selected: selected,
-                        showCheckmark: false,
-                        selectedColor: AppColors.brandForest,
-                        backgroundColor: Colors.white,
-                        side: BorderSide(
-                          color: selected
-                              ? AppColors.brandForest
-                              : AppColors.border,
-                        ),
-                        labelStyle: TextStyle(
-                          color: selected ? Colors.white : AppColors.mutedText,
-                          fontWeight: FontWeight.w800,
-                        ),
-                        onSelected: (_) =>
-                            setSheetState(() => selectedTime = time),
-                      );
-                    }).toList(),
+                  // Scrollable fluid glass time selector
+                  // (glass_tab_bar_scrollable_demo.dart
+                  // GlassSegmentedControl.scrollable pattern): 14 slots never
+                  // fit a fixed track, so natural-width segments scroll and
+                  // the refractive indicator glides to the tapped slot.
+                  GlassSegmentedControl.scrollable(
+                    segments: timeSlots
+                        .map((time) => GlassSegment(label: time))
+                        .toList(),
+                    selectedIndex: timeSlots.indexOf(selectedTime),
+                    onSegmentSelected: (index) =>
+                        setSheetState(() => selectedTime = timeSlots[index]),
+                    useOwnLayer: true,
+                    // Same opaque-sheet treatment as the day selector: tinted
+                    // track + solid forest indicator pill with white text.
+                    backgroundColor: AppColors.brandForest.withValues(
+                      alpha: 0.08,
+                    ),
+                    indicatorColor: AppColors.brandForest,
+                    selectedTextStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                    unselectedTextStyle: TextStyle(
+                      color: AppColors.mutedText.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
+                  // Liquid glass continue action
+                  // (quality_comparison_demo.dart GlassButton pattern):
+                  // refractive pill with squeeze & stretch physics instead of
+                  // the flat FilledButton. GlassButton uses onTap (not
+                  // onPressed); the .custom constructor allows a full-width
+                  // text child. Own layer — sibling of the selectors above,
+                  // never nested inside another glass surface.
+                  GlassButton.custom(
                     width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(
-                          context,
-                          _SelectedSlot(selectedDay.title, selectedTime),
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.brandForest,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                    height: 52,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                    useOwnLayer: true,
+                    // Forest-tinted glass so the CTA reads as a solid action
+                    // on the white sheet (glassColor opacity = tint
+                    // intensity); white label stays legible over the tint.
+                    settings: const LiquidGlassSettings(
+                      glassColor: AppColors.brandForest,
+                    ),
+                    onTap: () {
+                      Navigator.pop(
+                        context,
+                        _SelectedSlot(selectedDay.title, selectedTime),
+                      );
+                    },
+                    child: Center(
                       child: Text(
                         'Continue - ${selectedDay.title}, $selectedTime',
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          letterSpacing: 0.1,
+                        ),
                       ),
                     ),
                   ),
@@ -436,7 +484,18 @@ class _SelectedSlot {
   String get label => '$day, $time';
 }
 
-enum _BookingPrepAction { continueBooking, cancel, diy }
+enum _BookingPrepAction { continueBooking, cancel }
+
+/// Result of the problem-description step: what to do next, plus the typed
+/// or dictated description (empty when the user continues without typing).
+class _BookingPrepData {
+  const _BookingPrepData(this.action, this.description);
+
+  final _BookingPrepAction action;
+  final String description;
+}
+
+enum _PrepMode { options, listening, describe }
 
 class _BookingPrepDialog extends StatefulWidget {
   const _BookingPrepDialog({required this.service});
@@ -449,169 +508,905 @@ class _BookingPrepDialog extends StatefulWidget {
 
 class _BookingPrepDialogState extends State<_BookingPrepDialog>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+  _PrepMode _mode = _PrepMode.options;
 
-  static const _messages = [
-    'Checking nearby verified professionals...',
-    'Most home fixes finish within a single visit.',
-    'Comparing your slot with live availability...',
-    'Tip: keep photos of the issue ready for faster diagnosis.',
-  ];
+  final TextEditingController _textController = TextEditingController();
+  final SpeechToText _speech = SpeechToText();
+
+  late final AnimationController _pulseController;
+
+  bool _startingListen = false;
+  String _liveTranscript = '';
+  String? _micError;
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 5200),
-        )..addStatusListener((status) {
-          if (status == AnimationStatus.completed && mounted) {
-            Navigator.pop(context, _BookingPrepAction.continueBooking);
-          }
-        });
-    _controller.forward();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseController.dispose();
+    _speech.stop();
+    _textController.dispose();
     super.dispose();
+  }
+
+  /// Turns the mic on and streams speech recognition. Partial results show
+  /// live; the final transcript expands the dialog into the full editor.
+  Future<void> _startListening() async {
+    if (_startingListen) {
+      return;
+    }
+    setState(() {
+      _startingListen = true;
+      _micError = null;
+    });
+    try {
+      final available = await _speech.initialize(
+        onStatus: (status) {
+          // Engine idled on its own (e.g. pause timeout): fold whatever was
+          // heard into the editor instead of hanging on the listening view.
+          if ((status == 'done' || status == 'notListening') &&
+              mounted &&
+              _mode == _PrepMode.listening) {
+            _finishListening(auto: true);
+          }
+        },
+        onError: (error) {
+          if (!mounted) {
+            return;
+          }
+          _speech.stop();
+          _pulseController.stop();
+          setState(() {
+            _startingListen = false;
+            _mode = _PrepMode.options;
+            _micError =
+                'Microphone unavailable (${error.errorMsg}). '
+                'Please type your problem instead.';
+          });
+        },
+      );
+      if (!available) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _startingListen = false;
+          _mode = _PrepMode.options;
+          _micError =
+              'Speech recognition is not available on this device. '
+              'Please type your problem instead.';
+        });
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mode = _PrepMode.listening;
+        _liveTranscript = '';
+        _startingListen = false;
+      });
+      _pulseController.repeat(reverse: true);
+      await _speech.listen(
+        onResult: (result) {
+          if (!mounted) {
+            return;
+          }
+          setState(() => _liveTranscript = result.recognizedWords);
+          if (result.finalResult) {
+            _finishListening(auto: true);
+          }
+        },
+        listenOptions: SpeechListenOptions(
+          listenFor: const Duration(seconds: 60),
+          pauseFor: const Duration(seconds: 4),
+          partialResults: true,
+          cancelOnError: true,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      await _speech.stop();
+      _pulseController.stop();
+      setState(() {
+        _startingListen = false;
+        _mode = _PrepMode.options;
+        _micError =
+            'Could not start the microphone. Please type your problem instead.';
+      });
+    }
+  }
+
+  /// Stops the recognizer and expands the dialog to the fullest editor with
+  /// the transcript loaded for review.
+  Future<void> _finishListening({required bool auto}) async {
+    await _speech.stop();
+    _pulseController.stop();
+    if (!mounted) {
+      return;
+    }
+    final heard = _liveTranscript.trim();
+    if (heard.isNotEmpty) {
+      _textController.text = heard;
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _textController.text.length),
+      );
+    }
+    setState(() {
+      if (heard.isNotEmpty || !auto) {
+        _mode = _PrepMode.describe;
+        _micError = null;
+      } else {
+        // Engine stopped on its own without hearing anything.
+        _mode = _PrepMode.options;
+        _micError = 'Did not catch that — please try again or type it.';
+      }
+    });
+  }
+
+  void _close(_BookingPrepAction action, [String description = '']) {
+    _speech.stop();
+    _pulseController.stop();
+    Navigator.pop(context, _BookingPrepData(action, description));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final index = (_controller.value * _messages.length).floor().clamp(
-              0,
-              _messages.length - 1,
-            );
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: widget.service.color,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(
-                        widget.service.icon,
-                        color: AppColors.brandForest,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Preparing your booking',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.service.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.mutedText,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: _controller.value,
-                    minHeight: 7,
-                    backgroundColor: AppColors.border.withValues(alpha: 0.5),
-                    color: AppColors.brandForest,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: Text(
-                    _messages[index],
-                    key: ValueKey(index),
-                    style: const TextStyle(
-                      color: AppColors.brandForest,
-                      fontSize: 14,
-                      height: 1.35,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'We are doing a quick availability poll for your selected slot.',
-                  style: TextStyle(
-                    color: AppColors.mutedText.withValues(alpha: 0.88),
-                    fontSize: 12.5,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () =>
-                            Navigator.pop(context, _BookingPrepAction.cancel),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.brandForest,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () =>
-                            Navigator.pop(context, _BookingPrepAction.diy),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.brandForest,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('DIY'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
+    // One bottom dialog for the whole flow: it morphs from the compact
+    // options row into the near-full-height editor (AnimatedSize) instead
+    // of opening anything new.
+    final expanded = _mode == _PrepMode.describe;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: expanded ? _buildDescribe() : _buildCompact(),
+      ),
+    );
+  }
+
+  Widget _buildGrabber() {
+    return Center(
+      child: Container(
+        width: 42,
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.border,
+          borderRadius: BorderRadius.circular(999),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader({required String title, required String subtitle}) {
+    return Row(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: widget.service.color,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(
+            widget.service.icon,
+            color: AppColors.brandForest,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.brandForest,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                  height: 1.15,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: () => _close(_BookingPrepAction.cancel),
+          icon: const Icon(LucideIcons.x, color: AppColors.mutedText, size: 20),
+          tooltip: 'Close',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompact() {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18, 14, 18, 16 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildGrabber(),
+          const SizedBox(height: 14),
+          _buildHeader(
+            title: _mode == _PrepMode.listening
+                ? 'Listening…'
+                : 'State your problem',
+            subtitle: widget.service.title,
+          ),
+          const SizedBox(height: 16),
+          if (_mode == _PrepMode.listening)
+            _buildListening()
+          else
+            _buildOptions(),
+          if (_micError != null && _mode == _PrepMode.options) ...[
+            const SizedBox(height: 12),
+            Text(
+              _micError!,
+              style: const TextStyle(
+                color: AppColors.mutedText,
+                fontSize: 12.5,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Compact section: "Write here" option on the left, a divider
+  /// in the middle, and the speaker (mic) option on the right.
+  Widget _buildOptions() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.borderSubtle),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _mode = _PrepMode.describe),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.messageSquareText,
+                      color: AppColors.brandForest,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Write here',
+                        style: TextStyle(
+                          color: AppColors.brandForest,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      LucideIcons.chevronRight,
+                      color: AppColors.mutedText,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 48, color: AppColors.borderSubtle),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: _buildMicButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Circular mic affordance: solid forest so it reads on the white dialog,
+  /// red + pulsing while the mic is on.
+  Widget _buildMicButton() {
+    final listening = _mode == _PrepMode.listening;
+    final button = Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: listening ? Colors.red.shade600 : AppColors.brandForest,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: (listening ? Colors.red.shade600 : AppColors.brandForest)
+                .withValues(alpha: 0.32),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: _startingListen
+          ? const Padding(
+              padding: EdgeInsets.all(13),
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            )
+          : const Icon(LucideIcons.mic, color: Colors.white, size: 22),
+    );
+    final tappable = GestureDetector(
+      onTap: listening || _startingListen ? null : _startListening,
+      child: button,
+    );
+    if (!listening) {
+      return tappable;
+    }
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (_, child) => Transform.scale(
+        scale: 1 + _pulseController.value * 0.1,
+        child: child,
+      ),
+      child: tappable,
+    );
+  }
+
+  Widget _buildListening() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 4),
+        _buildMicButton(),
+        const SizedBox(height: 12),
+        const Text(
+          'Speak now — transcribing as you talk…',
+          style: TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Text(
+            _liveTranscript.isEmpty ? '…' : _liveTranscript,
+            style: const TextStyle(
+              color: AppColors.brandForest,
+              fontSize: 14,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _finishListening(auto: false),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandForest,
+              side: const BorderSide(color: AppColors.borderSubtle),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Stop & review',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Expanded fullest state of the same bottom sheet: big text box plus
+  /// Back / Continue actions. Shrinks above the keyboard so Continue never
+  /// hides behind it. Scroll-based (fixed-height text box, no flex) so no
+  /// transient height — sheet growth or keyboard animation — can overflow.
+  Widget _buildDescribe() {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final sheetHeight = (screenHeight * 0.88).clamp(420.0, screenHeight * 0.92);
+    // Fixed chrome around the text box: grabber + gaps + header + gaps +
+    // buttons + outer padding. Whatever is left goes to the text box
+    // (floored so it stays usable on short screens — the scroll view absorbs
+    // the rest instead of overflowing). Do not subtract keyboard height here:
+    // the modal route already lifts above the keyboard, and double-counting
+    // the inset is what made the dialog collapse when typing.
+    const chromeHeight = 14.0 + 4.0 + 14.0 + 48.0 + 14.0 + 14.0 + 48.0;
+    final boxHeight = (sheetHeight - chromeHeight - 14.0 - 16.0 - bottomInset)
+        .clamp(140.0, double.infinity)
+        .toDouble();
+    return SizedBox(
+      height: sheetHeight,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(18, 14, 18, 16 + bottomInset),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildGrabber(),
+            const SizedBox(height: 14),
+            _buildHeader(
+              title: 'State your problem',
+              subtitle: widget.service.title,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: boxHeight,
+              child: TextField(
+                controller: _textController,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                textAlignVertical: TextAlignVertical.top,
+                textCapitalization: TextCapitalization.sentences,
+                style: const TextStyle(
+                  color: AppColors.brandForest,
+                  fontSize: 14.5,
+                  height: 1.45,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Write here…',
+                  hintStyle: TextStyle(
+                    color: AppColors.mutedText.withValues(alpha: 0.75),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.all(14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.borderSubtle),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.borderSubtle),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandForest,
+                      width: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => setState(() => _mode = _PrepMode.options),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandForest,
+                      side: const BorderSide(color: AppColors.borderSubtle),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Back',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GlassButton.custom(
+                    width: double.infinity,
+                    height: 48,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                    useOwnLayer: true,
+                    settings: const LiquidGlassSettings(
+                      glassColor: AppColors.brandForest,
+                    ),
+                    onTap: () => _close(
+                      _BookingPrepAction.continueBooking,
+                      _textController.text.trim(),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Continue',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dummy payment screen: order summary, fake method picker, and a Pay now
+/// action that records the booking and returns to the home (first) route.
+class _PaymentPage extends StatefulWidget {
+  const _PaymentPage({
+    required this.service,
+    required this.slotLabel,
+    required this.description,
+    required this.onPaid,
+  });
+
+  final ServiceItem service;
+  final String slotLabel;
+  final String description;
+  final ValueChanged<Booking> onPaid;
+
+  @override
+  State<_PaymentPage> createState() => _PaymentPageState();
+}
+
+class _PaymentPageState extends State<_PaymentPage> {
+  static const _methods = [
+    (label: 'UPI', icon: LucideIcons.smartphone),
+    (label: 'Card', icon: LucideIcons.creditCard),
+    (label: 'Cash after service', icon: LucideIcons.banknote),
+  ];
+
+  int _methodIndex = 0;
+  bool _paying = false;
+
+  static const _platformFee = 29;
+
+  int get _total => widget.service.price + _platformFee;
+
+  Future<void> _payNow() async {
+    if (_paying) {
+      return;
+    }
+    setState(() => _paying = true);
+    // Fake gateway delay.
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) {
+      return;
+    }
+    widget.onPaid(
+      Booking(
+        service: widget.service,
+        mode: BookingMode.scheduled.label,
+        slot: widget.slotLabel,
+        payment: _methods[_methodIndex].label,
+        total: _total,
+      ),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Payment successful — your professional will be assigned shortly.',
+        ),
+      ),
+    );
+    // Back to the existing home shell. If the shell route name is not present
+    // in an older stack, reset to a fresh shell instead of falling through to
+    // Login/onboarding.
+    var foundHome = false;
+    Navigator.of(context).popUntil((route) {
+      foundHome = route.settings.name == MainShell.routeName;
+      return foundHome;
+    });
+    if (!foundHome && mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          settings: const RouteSettings(name: MainShell.routeName),
+          builder: (_) => const MainShell(),
+        ),
+        (_) => false,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Payment'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.brandForest,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(18, 18, 18, 110 + bottomInset),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppColors.radiusCard),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: widget.service.color,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    widget.service.icon,
+                    color: AppColors.brandForest,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.service.title,
+                        style: const TextStyle(
+                          color: AppColors.brandForest,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.slotLabel,
+                        style: const TextStyle(
+                          color: AppColors.mutedText,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (widget.description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 12.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w400,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Bill details',
+            style: TextStyle(
+              color: AppColors.brandForest,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppColors.radiusCard),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Column(
+              children: [
+                _billRow('Service charge', 'Rs ${widget.service.price}'),
+                const SizedBox(height: 10),
+                _billRow('Platform fee', 'Rs $_platformFee'),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(height: 1, color: AppColors.borderSubtle),
+                ),
+                _billRow('Total', 'Rs $_total', isTotal: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Pay with',
+            style: TextStyle(
+              color: AppColors.brandForest,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._methods.indexed.map((entry) {
+            final selected = entry.$1 == _methodIndex;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _paying
+                    ? null
+                    : () => setState(() => _methodIndex = entry.$1),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected
+                          ? AppColors.brandForest
+                          : AppColors.borderSubtle,
+                      width: selected ? 1.4 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        entry.$2.icon,
+                        color: AppColors.brandForest,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          entry.$2.label,
+                          style: const TextStyle(
+                            color: AppColors.brandForest,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        selected ? LucideIcons.circleCheck : LucideIcons.circle,
+                        color: selected
+                            ? AppColors.brandForest
+                            : AppColors.mutedText,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          const Text(
+            'Demo checkout — no real money moves.',
+            style: TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+      bottomSheet: Container(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+        ),
+        child: GlassButton.custom(
+          width: double.infinity,
+          height: 52,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+          useOwnLayer: true,
+          settings: const LiquidGlassSettings(
+            glassColor: AppColors.brandForest,
+          ),
+          enabled: !_paying,
+          onTap: _payNow,
+          child: Center(
+            child: _paying
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    'Pay now · Rs $_total',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _billRow(String label, String value, {bool isTotal = false}) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isTotal ? AppColors.brandForest : AppColors.mutedText,
+              fontSize: isTotal ? 15 : 13.5,
+              fontWeight: isTotal ? FontWeight.w800 : FontWeight.w500,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: AppColors.brandForest,
+            fontSize: isTotal ? 16 : 14,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -654,8 +1449,8 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(AppColors.radiusCard),
+              border: Border.all(color: AppColors.borderSubtle),
             ),
             child: Row(
               children: [
@@ -680,9 +1475,11 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
                       Text(
                         widget.service.title,
                         style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
+                          color: AppColors.brandForest,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          height: 1.15,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -690,7 +1487,8 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
                         widget.slotLabel,
                         style: const TextStyle(
                           color: AppColors.mutedText,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -703,15 +1501,22 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
           const Text(
             'A few quick questions',
             style: TextStyle(
-              color: Colors.black,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
+              color: AppColors.brandForest,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              height: 1.2,
             ),
           ),
           const SizedBox(height: 6),
           const Text(
             'This helps the professional arrive prepared.',
-            style: TextStyle(color: AppColors.mutedText, height: 1.35),
+            style: TextStyle(
+              color: AppColors.mutedText,
+              height: 1.4,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 18),
           ...questions.indexed.map((entry) {
@@ -734,7 +1539,7 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
         padding: EdgeInsets.fromLTRB(16, 12, 16, actionBarBottomPadding),
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: AppColors.border)),
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
         ),
         child: Row(
           children: [
@@ -743,12 +1548,15 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
                 onPressed: _returnHome,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.brandForest,
-                  side: const BorderSide(color: AppColors.border),
+                  side: const BorderSide(color: AppColors.borderSubtle),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Skip'),
+                child: const Text(
+                  'Skip',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -889,19 +1697,21 @@ class _AllCategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.brandGold,
-      borderRadius: BorderRadius.circular(16 * scale),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18 * scale),
+      elevation: 0,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16 * scale),
+        borderRadius: BorderRadius.circular(18 * scale),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16 * scale),
-            border: Border.all(color: AppColors.border),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18 * scale),
+            border: Border.all(color: AppColors.borderSubtle),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 16 * scale,
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 18 * scale,
                 offset: Offset(0, 8 * scale),
               ),
             ],
@@ -921,7 +1731,7 @@ class _AllCategoryCard extends StatelessWidget {
                   child: Icon(
                     service.icon,
                     color: AppColors.brandForest,
-                    size: 38 * scale,
+                    size: 36 * scale,
                   ),
                 ),
                 SizedBox(height: 12 * scale),
@@ -930,12 +1740,14 @@ class _AllCategoryCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 15 * scale,
-                    fontWeight: FontWeight.w900,
+                    color: AppColors.brandForest,
+                    fontSize: 14.5 * scale,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                    height: 1.15,
                   ),
                 ),
-                SizedBox(height: 6 * scale),
+                SizedBox(height: 5 * scale),
                 Expanded(
                   child: Text(
                     service.subtitle,
@@ -944,11 +1756,12 @@ class _AllCategoryCard extends StatelessWidget {
                     style: TextStyle(
                       color: AppColors.mutedText,
                       fontSize: 11.5 * scale,
-                      height: 1.25,
-                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
+                SizedBox(height: 8 * scale),
                 Row(
                   children: [
                     Text(
@@ -956,14 +1769,15 @@ class _AllCategoryCard extends StatelessWidget {
                       style: TextStyle(
                         color: AppColors.brandForest,
                         fontSize: 13 * scale,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
                       ),
                     ),
                     const Spacer(),
                     Icon(
                       LucideIcons.chevronRight,
-                      color: AppColors.brandForest,
-                      size: 20 * scale,
+                      color: AppColors.mutedText,
+                      size: 18 * scale,
                     ),
                   ],
                 ),
@@ -984,9 +1798,15 @@ class _AllCategoryCard extends StatelessWidget {
 /// can never clip/cover the search). SafeArea above handles the status
 /// bar, so no notch overlap on any phone.
 class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
-  _StickySearchDelegate({required this.scale});
+  _StickySearchDelegate({
+    required this.scale,
+    required this.modeFilter,
+    required this.onModeFilterChanged,
+  });
 
   final double scale;
+  final BookingMode? modeFilter;
+  final ValueChanged<BookingMode?> onModeFilterChanged;
 
   // 8 top + 52 search + 12 bottom = 72. Fixed (not scaled) so the search
   // card can never overflow and get covered, on any screen width.
@@ -1005,170 +1825,186 @@ class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
     return Container(
       color: AppColors.brandGold,
       padding: EdgeInsets.fromLTRB(16 * scale, 8, 16 * scale, 12),
-      child: const _SearchBar(),
+      // The mode menu owns view filtering; the typed query is still a
+      // no-op for a future grid filter.
+      child: _SearchBar(
+        onChanged: (_) {},
+        modeFilter: modeFilter,
+        onModeFilterChanged: onModeFilterChanged,
+      ),
     );
   }
 
   @override
   bool shouldRebuild(covariant _StickySearchDelegate oldDelegate) =>
-      oldDelegate.scale != scale;
+      oldDelegate.scale != scale ||
+      oldDelegate.modeFilter != modeFilter ||
+      oldDelegate.onModeFilterChanged != onModeFilterChanged;
 }
 
-/// Rounded glassmorphic search bar: a frosted-glass pill floating over the
-/// gold header, speaking the same liquid-glass language as the bottom nav.
-/// Real backdrop blur + white gradient + hairline border + soft shadow,
-/// with a light band endlessly flowing left to right across the glass.
+/// Sticky search row: a real [GlassSearchBar] pill plus the booking-mode
+/// filter trigger. Typed input surfaces via [onChanged] for a future grid
+/// filter; the mode menu drives [_HomePageState._modeFilter].
 class _SearchBar extends StatefulWidget {
-  const _SearchBar();
+  const _SearchBar({this.onChanged, this.modeFilter, this.onModeFilterChanged});
+
+  final ValueChanged<String>? onChanged;
+  final BookingMode? modeFilter;
+  final ValueChanged<BookingMode?>? onModeFilterChanged;
 
   @override
   State<_SearchBar> createState() => _SearchBarState();
 }
 
-class _SearchBarState extends State<_SearchBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _flow;
+class _SearchBarState extends State<_SearchBar> {
+  late final TextEditingController _controller;
+
+  /// Imperative handle for the mode menu: item taps update the filter and
+  /// then close the menu explicitly — tapping an item does not dismiss it
+  /// on its own (only the outside-tap barrier does).
+  final GlassMenuController _menuController = GlassMenuController();
 
   @override
   void initState() {
     super.initState();
-    _flow = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2600),
-    )..repeat();
+    _controller = TextEditingController();
   }
 
   @override
   void dispose() {
-    _flow.dispose();
+    _controller.dispose();
     super.dispose();
+  }
+
+  void _selectMode(BookingMode? mode) {
+    widget.onModeFilterChanged?.call(mode);
+    _menuController.close();
+  }
+
+  /// Opens the mode menu deterministically on every tap.
+  ///
+  /// The trigger deliberately ignores the [GlassMenu] toggle callback: a tap
+  /// that lands while a close spring is still settling would re-toggle the
+  /// menu closed again (a swallowed tap — the "have to tap twice" bug),
+  /// while [GlassMenuController.open] reverses a mid-close spring toward open
+  /// for any timing. The trigger is only tappable while the menu is closed
+  /// (the menu blocks its own trigger while open), so an unconditional open
+  /// is safe. The search field is unfocused first so an open keyboard can't
+  /// cover the freshly opened menu.
+  void _openFilterMenu() {
+    FocusScope.of(context).unfocus();
+    _menuController.open();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Real liquid-glass lens (liquid_glass_easy): refracts the gold
-    // header live with an optical rim. Shimmer + content ride inside
-    // as the lens child, clipped to the pill.
+    // Real GlassSearchBar (standalone pattern from nav_bar_patterns_demo.dart:
+    // placeholder + useOwnLayer + onChanged). It owns its glass layer, so the
+    // filter action stays a plain sibling — glass is never nested in glass
+    // (SKILL.md Rule 2). Fixed 52px height preserves the sticky delegate's
+    // 72px extent; the typed query still surfaces via [onChanged].
     return SizedBox(
       height: 52,
-      child: LiquidGlassLens(
-        style: LiquidGlassStyle(
-          shape: const LiquidGlassShape.continuousRoundedRectangle(
-            cornerRadius: 26,
-          ),
-          appearance: LiquidGlassAppearance(
-            color: Colors.white.withValues(alpha: 0.6),
-            blur: const LiquidGlassBlur(sigmaX: 10, sigmaY: 10),
-          ),
-          refraction: const LiquidGlassRefraction(
-            distortion: 0.12,
-            distortionWidth: 30,
-          ),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Flowing shine band, behind the content.
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _flow,
-                builder: (_, _) => CustomPaint(
-                  painter: _SearchShimmerPainter(progress: _flow.value),
-                ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GlassSearchBar(
+              controller: _controller,
+              placeholder: 'Search for a service...',
+              useOwnLayer: true,
+              height: 52,
+              onChanged: (value) => widget.onChanged?.call(value),
+              searchIconColor: AppColors.brandForest.withValues(alpha: 0.88),
+              textStyle: const TextStyle(
+                color: AppColors.brandForest,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
+              placeholderStyle: TextStyle(
+                color: AppColors.brandForest.withValues(alpha: 0.58),
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.1,
               ),
             ),
-            // Content on top of the shine.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 6, 0),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.search_rounded,
-                    color: AppColors.brandForest,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Search for a service...',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w500,
-                      ),
+          ),
+          const SizedBox(width: 10),
+          // Booking-mode filter (glass_menu_demo.dart raw-GlassMenu pattern:
+          // the trigger opens the menu via the controller (not the toggle
+          // callback) so a tap morphs the button into the menu via the
+          // Liquid Morph Engine on the first tap — no wrapper animation.
+          // Top-right placement: the trigger sits at the header's trailing
+          // edge and the menu drops below it.
+          GlassMenu(
+            controller: _menuController,
+            menuAlignment: GlassMenuAlignment.topRight,
+            autoAdjustToScreen: true,
+            items: [
+              // Header caption in the same ink as the item titles (instead
+              // of the muted secondary caption) so the menu reads as one
+              // list. Resolved exactly like GlassMenuItem does.
+              Builder(
+                builder: (context) {
+                  final foreground =
+                      CupertinoTheme.of(context).textTheme.textStyle.color ??
+                      CupertinoColors.label;
+                  return GlassMenuLabel(
+                    title: 'Booking mode',
+                    style: TextStyle(
+                      color: foreground.withValues(alpha: 0.9),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                     ),
-                  ),
-                  Container(
-                    width: 1,
-                    height: 22,
-                    color: AppColors.brandForest.withValues(alpha: 0.14),
-                    margin: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandForest,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.brandForest.withValues(alpha: 0.35),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.tune_rounded,
-                      color: Colors.white,
-                      size: 19,
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
+              GlassMenuItem(
+                title: BookingMode.instant.label,
+                icon: const Icon(Icons.bolt),
+                isSelected: widget.modeFilter == BookingMode.instant,
+                trailing: widget.modeFilter == BookingMode.instant
+                    ? const Icon(Icons.check, size: 18)
+                    : null,
+                onTap: () => _selectMode(BookingMode.instant),
+              ),
+              GlassMenuItem(
+                title: BookingMode.scheduled.label,
+                icon: const Icon(Icons.schedule),
+                isSelected: widget.modeFilter == BookingMode.scheduled,
+                trailing: widget.modeFilter == BookingMode.scheduled
+                    ? const Icon(Icons.check, size: 18)
+                    : null,
+                onTap: () => _selectMode(BookingMode.scheduled),
+              ),
+              const GlassMenuDivider(),
+              GlassMenuItem(
+                title: 'Show all',
+                icon: const Icon(Icons.clear_all),
+                isSelected: widget.modeFilter == null,
+                trailing: widget.modeFilter == null
+                    ? const Icon(Icons.check, size: 18)
+                    : null,
+                onTap: () => _selectMode(null),
+              ),
+            ],
+            triggerBuilder: (context, _) => GlassIconButton(
+              icon: const Icon(
+                Icons.tune_rounded,
+                color: AppColors.brandForest,
+              ),
+              onPressed: _openFilterMenu,
+              useOwnLayer: true,
+              size: 40,
+              iconSize: 19,
+              semanticLabel: 'Filter by booking mode',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-}
-
-/// Diagonal light band travelling left to right across the search pill.
-/// Peak glows mid-band and fades to clear at both edges.
-class _SearchShimmerPainter extends CustomPainter {
-  const _SearchShimmerPainter({required this.progress});
-
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final band = size.width * 0.32;
-    const slant = 22.0;
-    final x = -band - slant + progress * (size.width + (band + slant) * 2);
-    final path = Path()
-      ..moveTo(x, 0)
-      ..lineTo(x + band, 0)
-      ..lineTo(x + band - slant, size.height)
-      ..lineTo(x - slant, size.height)
-      ..close();
-    final paint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0),
-          Colors.white.withValues(alpha: 0.5),
-          Colors.white.withValues(alpha: 0),
-        ],
-        stops: const [0, 0.5, 1],
-      ).createShader(Rect.fromLTWH(x - slant, 0, band + slant, size.height));
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SearchShimmerPainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }
 
 /// Pinned location bar delegate: fixed 64px gold strip, always on top.
@@ -1235,10 +2071,10 @@ class _LocationBar extends StatelessWidget {
                 Text(
                   'YOUR LOCATION',
                   style: TextStyle(
-                    color: AppColors.brandForest.withValues(alpha: 0.62),
-                    fontSize: 10.5 * scale,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
+                    color: AppColors.brandForest.withValues(alpha: 0.58),
+                    fontSize: 10 * scale,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9,
                   ),
                 ),
                 SizedBox(height: 2 * scale),
@@ -1251,9 +2087,10 @@ class _LocationBar extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: AppColors.brandForest,
-                          fontSize: 17 * scale,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.2,
+                          fontSize: 16.5 * scale,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                          height: 1.1,
                         ),
                       ),
                     ),
@@ -1338,27 +2175,32 @@ class _PromoBanner extends StatelessWidget {
                       children: [
                         Text(
                           'YOUR SOLUTION,\nONE TAP AWAY!',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: AppColors.brandForest,
-                            fontSize: 21 * scale,
-                            height: 1.08,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.3,
+                            fontSize: 18.5 * scale,
+                            height: 1.06,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
                           ),
                         ),
                         SizedBox(height: 8 * scale),
                         Text(
                           'Seamless, Fast & Reliable\nServices at Your Fingertips',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: AppColors.brandForest.withValues(
-                              alpha: 0.72,
+                              alpha: 0.68,
                             ),
-                            fontSize: 11.5 * scale,
-                            height: 1.3,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 10.5 * scale,
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.05,
                           ),
                         ),
-                        SizedBox(height: 13 * scale),
+                        const Spacer(),
                         SizedBox(
                           height: 38 * scale,
                           child: FilledButton(
@@ -1378,8 +2220,9 @@ class _PromoBanner extends StatelessWidget {
                             child: Text(
                               'Explore',
                               style: TextStyle(
-                                fontSize: 13.5 * scale,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 13 * scale,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ),
@@ -1475,15 +2318,14 @@ class _HeroCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          Positioned.fill(child: CustomPaint(painter: _CardDotsPainter())),
           Padding(
-            padding: EdgeInsets.all(12 * scale),
+            padding: EdgeInsets.all(9 * scale),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 52 * scale,
-                  height: 52 * scale,
+                  width: 46 * scale,
+                  height: 46 * scale,
                   decoration: BoxDecoration(
                     color: AppColors.brandForest,
                     borderRadius: BorderRadius.circular(15 * scale),
@@ -1513,23 +2355,29 @@ class _HeroCard extends StatelessWidget {
                         size: 13 * scale,
                       ),
                       SizedBox(width: 3 * scale),
-                      Text(
-                        '4.9 · Verified',
-                        style: TextStyle(
-                          color: AppColors.brandForest,
-                          fontSize: 10.5 * scale,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          '4.9 Verified',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.brandForest,
+                            fontSize: 9.5 * scale,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: 6 * scale),
+                SizedBox(height: 4 * scale),
                 Text(
                   '60-min doorstep fix',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.brandForest,
-                    fontSize: 11.5 * scale,
+                    fontSize: 10.5 * scale,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1569,31 +2417,6 @@ class _DotTexturePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _CardDotsPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.brandForest.withValues(alpha: 0.07);
-    canvas.drawCircle(
-      Offset(size.width * 0.88, size.height * 0.12),
-      size.width * 0.30,
-      paint,
-    );
-    final ring = Paint()
-      ..color = AppColors.brandGold.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    canvas.drawCircle(
-      Offset(size.width * 0.88, size.height * 0.12),
-      size.width * 0.22,
-      ring,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title, required this.onViewAll});
 
@@ -1608,9 +2431,11 @@ class _SectionHeader extends StatelessWidget {
           child: Text(
             title,
             style: const TextStyle(
-              color: Colors.black,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
+              color: AppColors.brandForest,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              height: 1.15,
             ),
           ),
         ),
@@ -1625,9 +2450,13 @@ class _SectionHeader extends StatelessWidget {
           iconAlignment: IconAlignment.end,
           label: const Text(
             'View all',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.1,
+            ),
           ),
-          icon: const Icon(LucideIcons.chevronRight, size: 17),
+          icon: const Icon(LucideIcons.chevronRight, size: 16),
         ),
       ],
     );
@@ -1647,27 +2476,30 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Package lite glass (no shader): docs-faithful for list items that
-    // scroll with content — frost, tint and lit rim, cheap and safe.
-    return LiquidGlassLens(
-      style: LiquidGlassStyle(
-        shape: LiquidGlassShape.roundedRectangle(
-          cornerRadius: 18 * scale,
-        ),
-        appearance: LiquidGlassAppearance(
-          color: Colors.white.withValues(alpha: 0.55),
-          shadow: LiquidGlassShadow(
-            blur: 8 * scale,
-            opacity: 0.14,
+    // Plain opaque tile (SKILL.md Rule 1): grid list items scroll with
+    // content and sit on a white background, so refractive glass would be
+    // invisible here while costing GPU fill-rate. Same card language as
+    // _AllCategoryCard: white, subtle border, soft shadow.
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18 * scale),
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18 * scale),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18 * scale),
+            border: Border.all(color: AppColors.borderSubtle),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 12 * scale,
+                offset: Offset(0, 6 * scale),
+              ),
+            ],
           ),
-        ),
-        liteGlass: LiquidGlassLitePickup.backdrop,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(18 * scale),
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: 6 * scale,
@@ -1689,8 +2521,10 @@ class _CategoryTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: AppColors.brandForest,
-                    fontSize: 11.8 * scale,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 11.5 * scale,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.1,
+                    height: 1.1,
                   ),
                 ),
               ],
@@ -1735,20 +2569,20 @@ class _PopularServiceCard extends StatelessWidget {
       width: 202 * scale,
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16 * scale),
+        borderRadius: BorderRadius.circular(18 * scale),
         elevation: 0,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16 * scale),
+          borderRadius: BorderRadius.circular(18 * scale),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16 * scale),
-              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(18 * scale),
+              border: Border.all(color: AppColors.borderSubtle),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 18 * scale,
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 20 * scale,
                   offset: Offset(0, 8 * scale),
                 ),
               ],
@@ -1760,7 +2594,7 @@ class _PopularServiceCard extends StatelessWidget {
                   height: 96 * scale,
                   child: ClipRRect(
                     borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(16 * scale),
+                      top: Radius.circular(18 * scale),
                     ),
                     child: DecoratedBox(
                       decoration: BoxDecoration(color: service.color),
@@ -1798,8 +2632,9 @@ class _PopularServiceCard extends StatelessWidget {
                                 service.badge,
                                 style: TextStyle(
                                   color: AppColors.brandForest,
-                                  fontSize: 9.8 * scale,
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: 9.5 * scale,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
                             ),
@@ -1825,9 +2660,11 @@ class _PopularServiceCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 15.5 * scale,
-                            fontWeight: FontWeight.w900,
+                            color: AppColors.brandForest,
+                            fontSize: 14.5 * scale,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                            height: 1.1,
                           ),
                         ),
                         SizedBox(height: 7 * scale),
@@ -1856,25 +2693,38 @@ class _PopularServiceCard extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const Spacer(),
-                            Icon(
-                              LucideIcons.clock,
-                              color: AppColors.mutedText,
-                              size: 14 * scale,
-                            ),
-                            SizedBox(width: 3 * scale),
-                            Text(
-                              service.duration,
-                              style: TextStyle(
-                                color: AppColors.mutedText,
-                                fontSize: 11 * scale,
-                                fontWeight: FontWeight.w700,
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    LucideIcons.clock,
+                                    color: AppColors.mutedText,
+                                    size: 14 * scale,
+                                  ),
+                                  SizedBox(width: 3 * scale),
+                                  Flexible(
+                                    child: Text(
+                                      service.duration,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: AppColors.mutedText,
+                                        fontSize: 10.5 * scale,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                         SizedBox(height: 9 * scale),
                         Container(
+                          width: double.infinity,
                           padding: EdgeInsets.symmetric(
                             horizontal: 8 * scale,
                             vertical: 5 * scale,
@@ -1894,12 +2744,17 @@ class _PopularServiceCard extends StatelessWidget {
                                 size: 13 * scale,
                               ),
                               SizedBox(width: 4 * scale),
-                              Text(
-                                'Verified Professional',
-                                style: TextStyle(
-                                  color: AppColors.brandForest,
-                                  fontSize: 10.5 * scale,
-                                  fontWeight: FontWeight.w800,
+                              Expanded(
+                                child: Text(
+                                  'Verified Professional',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppColors.brandForest,
+                                    fontSize: 9.5 * scale,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.1,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1913,42 +2768,48 @@ class _PopularServiceCard extends StatelessWidget {
                               'Rs${service.price}',
                               style: TextStyle(
                                 color: AppColors.brandForest,
-                                fontSize: 15 * scale,
-                                fontWeight: FontWeight.w900,
+                                fontSize: 14 * scale,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            SizedBox(width: 4 * scale),
+                            Flexible(
+                              child: Text(
+                                'Rs$originalPrice',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 10 * scale,
+                                  fontWeight: FontWeight.w500,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
                               ),
                             ),
                             SizedBox(width: 6 * scale),
-                            Text(
-                              'Rs$originalPrice',
-                              style: TextStyle(
-                                color: AppColors.mutedText,
-                                fontSize: 11.5 * scale,
-                                fontWeight: FontWeight.w700,
-                                decoration: TextDecoration.lineThrough,
-                              ),
-                            ),
-                            const Spacer(),
                             SizedBox(
-                              height: 34 * scale,
+                              height: 31 * scale,
                               child: FilledButton(
                                 onPressed: onTap,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.brandForest,
                                   foregroundColor: Colors.white,
                                   padding: EdgeInsets.symmetric(
-                                    horizontal: 11 * scale,
+                                    horizontal: 7 * scale,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(
-                                      9 * scale,
+                                      10 * scale,
                                     ),
                                   ),
                                 ),
                                 child: Text(
                                   'Book Now',
                                   style: TextStyle(
-                                    fontSize: 11.5 * scale,
-                                    fontWeight: FontWeight.w900,
+                                    fontSize: 9.5 * scale,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.1,
                                   ),
                                 ),
                               ),
@@ -2009,34 +2870,59 @@ class _TrustTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(14 * scale),
+      padding: EdgeInsets.all(13 * scale),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16 * scale),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(18 * scale),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16 * scale,
+            offset: Offset(0, 6 * scale),
+          ),
+        ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppColors.brandForest, size: 24 * scale),
-          SizedBox(height: 10 * scale),
+          Container(
+            width: 34 * scale,
+            height: 34 * scale,
+            decoration: BoxDecoration(
+              color: AppColors.brandForest.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10 * scale),
+            ),
+            child: Icon(icon, color: AppColors.brandForest, size: 19 * scale),
+          ),
+          SizedBox(height: 5 * scale),
           Text(
             title,
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 14 * scale,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          SizedBox(height: 4 * scale),
-          Text(
-            body,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: AppColors.mutedText,
+              color: AppColors.brandForest,
               fontSize: 12 * scale,
-              height: 1.25,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+              height: 1.2,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 2 * scale),
+              child: Text(
+                body,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 10 * scale,
+                  height: 1.2,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
         ],

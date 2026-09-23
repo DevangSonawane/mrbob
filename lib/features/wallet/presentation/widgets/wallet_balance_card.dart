@@ -8,25 +8,39 @@ class WalletBalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.brandForest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppColors.radiusCard),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandForest.withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Available balance',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Rs 1,240',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 34,
-              fontWeight: FontWeight.w900,
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.8,
+              height: 1,
             ),
           ),
           const SizedBox(height: 18),

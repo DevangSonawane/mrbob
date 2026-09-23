@@ -23,11 +23,12 @@ class BookingSuccessPage extends StatelessWidget {
                 height: 110,
                 decoration: BoxDecoration(
                   color: AppColors.surfaceTint,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: AppColors.borderSubtle),
                 ),
                 child: const Icon(
                   LucideIcons.badgeCheck,
-                  size: 62,
+                  size: 52,
                   color: AppColors.brandForest,
                 ),
               ),
@@ -35,7 +36,9 @@ class BookingSuccessPage extends StatelessWidget {
               Text(
                 'Booking confirmed',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                  color: AppColors.brandForest,
                 ),
               ),
               const SizedBox(height: 10),

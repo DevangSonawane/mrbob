@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/simple_page.dart';
 import '../../../../shared/widgets/support_tile.dart';
 import '../../../refer/presentation/pages/refer_page.dart';
@@ -17,14 +18,38 @@ class ProfilePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 112),
         children: [
-          const Card(
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: AppColors.borderSubtle),
+            ),
             child: ListTile(
-              leading: CircleAvatar(child: Icon(Icons.person_rounded)),
-              title: Text(
-                'Aarav Mehta',
-                style: TextStyle(fontWeight: FontWeight.w900),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
               ),
-              subtitle: Text('+91 98765 43210 - aarav@postfix.app'),
+              leading: const CircleAvatar(
+                backgroundColor: AppColors.surfaceTint,
+                foregroundColor: AppColors.brandForest,
+                child: Icon(Icons.person_rounded),
+              ),
+              title: const Text(
+                'Aarav Mehta',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: AppColors.brandForest,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              subtitle: const Text(
+                '+91 98765 43210 · aarav@mrbob.app',
+                style: TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),

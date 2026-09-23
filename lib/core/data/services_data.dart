@@ -26,6 +26,7 @@ const services = [
     duration: '60 min',
     badge: 'Instant ready',
     color: Color(0xFFFFF8E8),
+    supportsInstant: true,
     questions: [
       'What needs fixing?',
       'Is water supply currently shut?',
@@ -40,6 +41,7 @@ const services = [
     duration: '75 min',
     badge: 'Verified pro',
     color: Color(0xFFFFE3A1),
+    supportsInstant: true,
     questions: [
       'Which fixture is affected?',
       'Is the issue recurring?',
@@ -110,6 +112,7 @@ const services = [
     duration: '75 min',
     badge: 'Home care',
     color: Color(0xFFEAF3DE),
+    supportsInstant: true,
     questions: [
       'Which appliance needs repair?',
       'What issue are you facing?',
