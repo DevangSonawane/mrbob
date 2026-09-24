@@ -27,7 +27,7 @@ class ReferPage extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: AppColors.brandForest.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: const Icon(
                   Icons.card_giftcard_rounded,

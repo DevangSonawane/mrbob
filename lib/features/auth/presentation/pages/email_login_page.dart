@@ -119,7 +119,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                                 end: Alignment.bottomCenter,
                                 colors: [Colors.white, AppColors.surfaceTint],
                               ),
-                              borderRadius: BorderRadius.circular(32),
+                              borderRadius: BorderRadius.circular(15),
                               border: Border.all(color: Colors.white, width: 4),
                               boxShadow: [
                                 BoxShadow(
@@ -291,7 +291,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                                           AppColors.brandForest,
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(20),
+                                      borderRadius: BorderRadius.circular(15),
                                       boxShadow: [
                                         BoxShadow(
                                           color: AppColors.brandForest

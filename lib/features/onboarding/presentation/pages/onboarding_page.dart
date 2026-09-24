@@ -229,7 +229,7 @@ class _HeroCard extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.surfaceTint,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(color: AppColors.borderSubtle),
         boxShadow: const [
           BoxShadow(
@@ -240,7 +240,7 @@ class _HeroCard extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(15),
         child: Stack(
           fit: StackFit.expand,
           children: [

@@ -23,7 +23,7 @@ class BookingSuccessPage extends StatelessWidget {
                 height: 110,
                 decoration: BoxDecoration(
                   color: AppColors.surfaceTint,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(15),
                   border: Border.all(color: AppColors.borderSubtle),
                 ),
                 child: const Icon(

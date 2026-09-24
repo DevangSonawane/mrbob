@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/booking_card.dart';
-import '../widgets/bookings_summary_card.dart';
+import 'booking_detail_page.dart';
 
 class BookingsPage extends StatefulWidget {
   const BookingsPage({super.key, required this.bookings, this.onBrowse});
@@ -45,9 +45,7 @@ class _BookingsPageState extends State<BookingsPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
           children: [
-            _Header(bookings: widget.bookings),
-            const SizedBox(height: 22),
-            BookingsSummaryCard(bookings: widget.bookings),
+            const _Header(),
             const SizedBox(height: 18),
             _GlassFilterBar(
               filters: _filters,
@@ -61,7 +59,16 @@ class _BookingsPageState extends State<BookingsPage> {
               Column(
                 children: [
                   for (final booking in filtered) ...[
-                    BookingCard(booking: booking),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              BookingDetailPage(booking: booking),
+                        ),
+                      ),
+                      child: BookingCard(booking: booking),
+                    ),
                     const SizedBox(height: 14),
                   ],
                 ],
@@ -74,56 +81,18 @@ class _BookingsPageState extends State<BookingsPage> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.bookings});
-
-  final List<Booking> bookings;
+  const _Header();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.brandForest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.build_circle_rounded,
-            color: AppColors.brandGold,
-            size: 24,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'My bookings',
-                style: TextStyle(
-                  color: AppColors.brandForest,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.4,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                bookings.isEmpty
-                    ? 'No bookings yet'
-                    : '${bookings.length} service booking${bookings.length == 1 ? '' : 's'}',
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return const Text(
+      'My bookings',
+      style: TextStyle(
+        color: AppColors.brandForest,
+        fontSize: 23,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -0.4,
+      ),
     );
   }
 }
@@ -150,12 +119,9 @@ class _GlassFilterBar extends StatelessWidget {
       onSegmentSelected: onSelected,
       height: 42,
       backgroundColor: AppColors.brandForest,
-      // The indicator defaults to near-black glass, which swallowed the
-      // dark selected text on the dark track — a gold pill fixes contrast
-      // and matches the brand.
       indicatorColor: AppColors.brandGold,
       selectedTextStyle: const TextStyle(
-        color: AppColors.brandForest,
+        color: Colors.white,
         fontSize: 12.5,
         fontWeight: FontWeight.w800,
       ),
@@ -221,7 +187,7 @@ class _EmptyState extends StatelessWidget {
                 backgroundColor: AppColors.brandForest,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,

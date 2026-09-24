@@ -18,8 +18,8 @@ class AppColors {
   // Premium shadow — soft, diffused, barely lifts the card.
   static const cardShadow = Color(0x0F0D230D);
 
-  // Canonical radii — Service Categories (18) is the source of truth.
-  static const double radiusCard = 18;
-  static const double radiusCardInner = 14;
+  // Canonical radii for non-input card surfaces.
+  static const double radiusCard = 15;
+  static const double radiusCardInner = 15;
   static const double radiusPill = 999;
 }

@@ -62,7 +62,7 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
                     height: 52,
                     decoration: BoxDecoration(
                       color: widget.service.color,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(15),
                     ),
                     child: Icon(
                       widget.service.icon,

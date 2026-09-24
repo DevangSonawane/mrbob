@@ -31,7 +31,7 @@ class CouponCard extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: AppColors.surfaceTint,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: AppColors.borderSubtle),
               ),
               child: Text(
