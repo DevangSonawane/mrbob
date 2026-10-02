@@ -11,11 +11,24 @@ Future<void> main() async {
   await LiquidGlassWidgets.initialize();
   runApp(
     LiquidGlassWidgets.wrap(
-      // Off: the experimental tier-stepping re-grades glass quality at
-      // runtime (benchmark ~3s after launch, then ongoing demote/recover),
-      // which made the tab-bar indicator visibly pop in and out on device.
-      // Deterministic standard quality until the package's thresholds mature.
-      adaptiveQuality: false,
+      // On, but pinned: the tier-stepping re-grades glass quality at runtime
+      // (benchmark ~3s after launch, then ongoing demote/recover), which made
+      // the tab-bar indicator visibly pop in and out on device.
+      //
+      // The scope is still required, because it is the only thing that caps
+      // quality. With it absent, GlassScaffold / GlassTabBar promote their
+      // bars to GlassQuality.premium regardless of the theme tier, and on a
+      // pre-A15 GPU that pair blows the 16 ms raster budget (23.4 ms measured)
+      // and surfaces the package's premium performance warning.
+      //
+      // maxQuality + allowStepUp:false means the ceiling is standard, so there
+      // is no promotion and therefore no pop — the scope only ever demotes.
+      adaptiveQuality: true,
+      adaptiveConfig: const GlassAdaptiveScopeConfig(
+        maxQuality: GlassQuality.standard,
+        initialQuality: GlassQuality.standard,
+        allowStepUp: false,
+      ),
       respectSystemAccessibility: true,
       // Bridges Material ThemeMode into the glass brightness cascade
       // without the package importing flutter/material (SKILL.md §2).

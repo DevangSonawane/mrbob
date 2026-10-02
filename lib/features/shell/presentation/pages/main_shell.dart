@@ -59,8 +59,8 @@ class _MainShellState extends State<MainShell> {
       semanticLabel: 'Home',
     ),
     GlassTab(
-      icon: Icon(Icons.receipt_long_outlined),
-      activeIcon: Icon(Icons.receipt_long_rounded),
+      icon: Icon(Icons.confirmation_number_outlined),
+      activeIcon: Icon(Icons.confirmation_number_rounded),
       semanticLabel: 'Bookings',
     ),
     GlassTab(
@@ -102,12 +102,23 @@ class _MainShellState extends State<MainShell> {
         spacing: 4,
         horizontalPadding: 16,
         verticalPadding: 16,
+        // Apple-style: light tint, real blur + saturation + edge light.
+        // Definition comes from refraction and the specular edge — not
+        // opacity — so the pill stays liquid over any page.
+        settings: LiquidGlassSettings(
+          glassColor: Colors.white.withValues(alpha: 0.32),
+          blur: 20,
+          thickness: 28,
+          saturation: 1.7,
+          lightIntensity: 0.7,
+          ambientStrength: 0.1,
+        ),
         selectedIconColor: AppColors.brandForest,
         unselectedIconColor: AppColors.mutedText,
         showIndicator: true,
         // Forest-tinted pill: the default indicator washes out over our
         // white pages, which is why the selection circle kept disappearing.
-        indicatorColor: AppColors.brandForest.withValues(alpha: 0.14),
+        indicatorColor: AppColors.brandForest.withValues(alpha: 0.18),
         interactionGlowColor: Colors.transparent,
       ),
     );

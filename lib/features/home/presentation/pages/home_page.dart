@@ -7,10 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:voice_anim_kit/voice_anim_kit.dart';
-import 'package:waveform_flutter/waveform_flutter.dart';
 
 import '../../../../core/data/services_data.dart';
+import '../../../../shared/widgets/thinking_orb.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -240,18 +239,38 @@ class _HomePageState extends State<HomePage> {
       controller: sheetController,
       initialState: GlassSheetState.half,
       halfSize: 0.62,
-      // Full detent stays frosted glass (a bit more solid than half) instead
-      // of flipping to opaque white — gradual fill so the change melts in.
-      fullSettings: LiquidGlassSettings(
-        glassColor: Colors.white.withValues(alpha: 0.55),
-        blur: 22,
-        thickness: 30,
+      // Half state (circles + orb) is where the sheet washed out: clear
+      // glass over the white page has nothing to refract, and edge-to-edge
+      // with square corners melts into the body. Float this detent only —
+      // full state below stays solid for editor legibility.
+      halfSettings: LiquidGlassSettings(
+        glassColor: Colors.white.withValues(alpha: 0.88),
+        blur: 28,
+        thickness: 40,
+      ),
+      // Dim the page behind this sheet only, so the frosted half reads
+      // as a layer instead of melting into the white body.
+      barrierColor: Colors.black.withValues(alpha: 0.32),
+      // The editor detent fills solid instead of staying frosted. That is
+      // the one surface in this flow where the user types the thing the
+      // whole booking depends on, so legibility outranks the effect here —
+      // and it matches where the platform landed: Tinted mode and the
+      // complex-content diffusion layer both exist for exactly this case.
+      // blur 0 is the vendor's solid stop; the sheet crossfades glass ->
+      // solid colour across the half -> full snap, so the morph still
+      // melts and only the translucency goes away.
+      fullSettings: const LiquidGlassSettings(
+        glassColor: AppColors.background,
+        blur: 0,
       ),
       fillTransition: GlassFillTransition.gradual,
-      // Edge to edge: no side or bottom margins, square bottom corners.
-      horizontalMargin: 0,
-      bottomMargin: 0,
-      bottomBorderRadius: 0,
+      // Floating card, not edge-to-edge: side + bottom margins with round
+      // corners cut it from the page (Maps-style). Package defaults are
+      // already floating — we keep an explicit tight float here.
+      horizontalMargin: 10,
+      bottomMargin: 12,
+      topBorderRadius: 28,
+      bottomBorderRadius: 28,
       detents: const {GlassSheetDetent.medium, GlassSheetDetent.large},
       builder: (_) => _BookingPrepDialog(
         service: service,
@@ -527,24 +546,24 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   final TextEditingController _textController = TextEditingController();
   final SpeechToText _speech = SpeechToText();
 
-  late final AnimationController _pulseController;
-
   /// Slow loop driving the lively fluid gradient behind the dialog content.
   late final AnimationController _fluidController;
 
+  /// Whether the wash ticker is currently running, so build can react to
+  /// the editor-detent flip once instead of re-arming it on every rebuild.
+  bool _fluidRunning = true;
+
   bool _startingListen = false;
   String _liveTranscript = '';
-  String? _micError;
 
-  /// Live voice level (0..1) driving the preview wave, plus the scrolling
-  /// sound track behind it. Levels come straight from speech_to_text's
-  /// sound-level callback, so no second mic client is ever opened.
-  double _voiceLevel = 0;
+  /// Live voice level (0..1) driving the thinking orb. A ValueNotifier so
+  /// mic ticks repaint ONLY the orb — not the whole sheet (that full
+  /// ListView rebuild on every level callback was the jank).
+  final ValueNotifier<double> _voiceLevel = ValueNotifier(0);
   double _minLevel = double.infinity;
   double _maxLevel = double.negativeInfinity;
-  StreamController<Amplitude>? _ampStream;
 
-  /// Gentle synthetic breathing for the wave until the first real mic level
+  /// Gentle synthetic breathing for the orb until the first real mic level
   /// arrives, so the visuals never sit dead on slower devices.
   Timer? _idleWaveTimer;
 
@@ -561,23 +580,20 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       }
       final t = DateTime.now().millisecondsSinceEpoch / 1000;
       final idle = 0.10 + 0.06 * math.sin(t * 1.3);
-      setState(() => _voiceLevel = idle);
-      _ampStream?.add(Amplitude(current: idle * 100, max: 100));
+      _voiceLevel.value = idle;
     });
   }
 
-  /// Shared failure exit: back to the circles with an explanatory error.
-  void _abortListen(String message) {
+  /// Silent failure exit: back to the circles, no error text.
+  void _abortListen() {
     _stopIdleWave();
     _speech.stop();
-    _pulseController.stop();
     if (!mounted) {
       return;
     }
     setState(() {
       _startingListen = false;
       _mode = _PrepMode.options;
-      _micError = message;
     });
   }
 
@@ -597,11 +613,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     _stopIdleWave();
     final span = (_maxLevel - _minLevel).clamp(0.001, double.infinity);
     final target = ((level - _minLevel) / span).clamp(0.0, 1.0);
-    setState(() {
-      // Ease toward the target so the wave glides instead of jumping.
-      _voiceLevel += (target - _voiceLevel) * 0.5;
-    });
-    _ampStream?.add(Amplitude(current: _voiceLevel * 100, max: 100));
+    // Ease toward the target so the orb glides instead of jumping.
+    // No setState: ValueNotifier repaints the orb alone.
+    _voiceLevel.value += (target - _voiceLevel.value) * 0.5;
   }
 
   /// Keyboard pops immediately only when the editor is opened via the chat
@@ -619,10 +633,6 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
     _fluidController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 9),
@@ -632,9 +642,8 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   @override
   void dispose() {
     _stopIdleWave();
-    unawaited(_ampStream?.close());
+    _voiceLevel.dispose();
     _fluidController.dispose();
-    _pulseController.dispose();
     _speech.stop();
     _textController.dispose();
     super.dispose();
@@ -646,20 +655,18 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     if (_startingListen) {
       return;
     }
-    // Optimistic UI: waves + track appear the instant the mic is tapped —
+    // Optimistic UI: orb appears the instant the mic is tapped —
     // the recognizer catches up underneath.
-    unawaited(_ampStream?.close());
-    _ampStream = StreamController<Amplitude>();
-    _voiceLevel = 0;
+    _voiceLevel.value = 0;
     _minLevel = double.infinity;
     _maxLevel = double.negativeInfinity;
     setState(() {
       _startingListen = true;
-      _micError = null;
       _mode = _PrepMode.listening;
       _liveTranscript = '';
     });
-    _pulseController.repeat(reverse: true);
+    // The sheet stays on its medium detent — tapping the mic must not resize
+    // the stage. The gradient simply hands off to the opaque white fill.
     _startIdleWave();
     try {
       final available = await _speech.initialize(
@@ -673,17 +680,11 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           }
         },
         onError: (error) {
-          _abortListen(
-            'Microphone unavailable (${error.errorMsg}). '
-            'Please type your problem instead.',
-          );
+          _abortListen();
         },
       );
       if (!available) {
-        _abortListen(
-          'Speech recognition is not available on this device. '
-          'Please type your problem instead.',
-        );
+        _abortListen();
         return;
       }
       if (!mounted) {
@@ -713,22 +714,19 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
         return;
       }
       await _speech.stop();
-      _pulseController.stop();
       setState(() {
         _startingListen = false;
         _mode = _PrepMode.options;
-        _micError =
-            'Could not start the microphone. Please type your problem instead.';
       });
     }
   }
 
   /// Stops the recognizer and expands the dialog to the fullest editor with
-  /// the transcript loaded for review.
+  /// the transcript loaded for review. Empty auto-stop glides back to the
+  /// circles silently — no "did not catch that" dead-ends.
   Future<void> _finishListening({required bool auto}) async {
     _stopIdleWave();
     await _speech.stop();
-    _pulseController.stop();
     if (!mounted) {
       return;
     }
@@ -742,20 +740,17 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     setState(() {
       if (heard.isNotEmpty || !auto) {
         _mode = _PrepMode.describe;
-        _micError = null;
         _autofocusEditor = false;
         widget.sheetController.snapToState(GlassSheetState.full);
       } else {
         // Engine stopped on its own without hearing anything.
         _mode = _PrepMode.options;
-        _micError = 'Did not catch that — please try again or type it.';
       }
     });
   }
 
   void _close(_BookingPrepAction action, [String description = '']) {
     _speech.stop();
-    _pulseController.stop();
     Navigator.pop(context, _BookingPrepData(action, description));
   }
 
@@ -769,18 +764,58 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     final screenHeight = MediaQuery.sizeOf(context).height;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final expanded = _mode == _PrepMode.describe;
-    // Compact dialog covers more than half the page with the circles pinned
-    // to its bottom: fixed-height content sized to the medium detent.
+    // The two invitation circles own the gradient; every working stage (the
+    // orb, the editor) sits on the opaque white fill instead. All three share
+    // one sheet height — the sheet never resizes between stages, only its
+    // surface crossfades.
+    final washOn = _mode == _PrepMode.options;
+    // Fixed-height content sized to the medium detent, unchanged.
     final compactHeight = (screenHeight * 0.62 - 96 - bottomInset)
         .clamp(280.0, double.infinity)
         .toDouble();
+    // Retiring the ticker instead of just hiding the wash keeps a full-screen
+    // CustomPaint from ticking under the orb or the caret — that was the third
+    // animating layer stacked on the shader and the blur.
+    if (_fluidRunning != washOn) {
+      _fluidRunning = washOn;
+      final run = washOn;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (run) {
+          _fluidController.repeat();
+        } else {
+          _fluidController.stop();
+        }
+      });
+    }
     // Lively fluid gradient drifting behind the content (isolated repaint,
-    // pointer-transparent so sheet drags still reach the ListView).
+    // pointer-transparent so sheet drags still reach the ListView). Faded out
+    // on the white working surfaces so no gradient drifts under the orb, the
+    // controls, or typed text.
     return Stack(
       children: [
+        // Opaque working surface. Sits under the wash so the hand-off is a
+        // straight crossfade: gradient out, white in, sheet height untouched.
         Positioned.fill(
           child: IgnorePointer(
-            child: _FluidBackdrop(animation: _fluidController),
+            child: AnimatedOpacity(
+              opacity: washOn ? 0 : 1,
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOut,
+              child: const ColoredBox(color: AppColors.background),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: washOn ? 1 : 0,
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOut,
+              child: _FluidBackdrop(animation: _fluidController),
+            ),
           ),
         ),
         ListView(
@@ -823,220 +858,140 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     );
   }
 
-  /// Tall compact dialog: no header chrome, just the circles pinned to the
-  /// bottom (the listening wave + controls float higher up while the mic
-  /// is on).
+  /// Compact dialog: one centered stage, cross-faded between the two
+  /// circles and the live orb — same height, same alignment, so the sheet
+  /// never jumps when the mic opens.
   Widget _buildCompact(double contentHeight) {
     final listening = _mode == _PrepMode.listening;
     return SizedBox(
       height: contentHeight,
-      child: Column(
-        mainAxisAlignment: listening
-            ? MainAxisAlignment.start
-            : MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (listening) ...[
-            const SizedBox(height: 8),
-            _buildListening(),
-          ] else
-            _buildOptions(),
-          if (_micError != null && _mode == _PrepMode.options) ...[
-            const SizedBox(height: 12),
-            Text(
-              _micError!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.mutedText,
-                fontSize: 12.5,
-                height: 1.4,
-                fontWeight: FontWeight.w500,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+            child: child,
+          ),
+        ),
+        child: listening
+            ? _buildListening(key: const ValueKey('listening'))
+            : _buildOptions(key: const ValueKey('options')),
+      ),
+    );
+  }
+
+  /// Compact section: just two glass circles, no text. Each owns its
+  /// glass layer so the two tints stay distinct on the shared sheet.
+  Widget _buildOptions({Key? key}) {
+    return Column(
+      key: key,
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GlassIconButton(
+              icon: const Icon(
+                LucideIcons.messageSquareText,
+                color: AppColors.brandForest,
               ),
+              onPressed: _startingListen ? null : _openEditor,
+              useOwnLayer: true,
+              size: 68,
+              iconSize: 26,
+              settings: const LiquidGlassSettings(
+                glassColor: Colors.transparent,
+              ),
+              semanticLabel: 'Describe the problem by text',
+            ),
+            const SizedBox(width: 28),
+            GlassIconButton(
+              icon: _startingListen
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(LucideIcons.mic, color: Colors.white),
+              onPressed: _startingListen ? null : _startListening,
+              useOwnLayer: true,
+              size: 68,
+              iconSize: 26,
+              settings: const LiquidGlassSettings(glassColor: Colors.black),
+              semanticLabel: 'Describe the problem by voice',
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  /// Compact section: just two glass circles side by side — a transparent
-  /// chat circle and a black mic circle. Each owns its glass layer so the
-  /// two tints stay distinct on the shared sheet surface.
-  Widget _buildOptions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        GlassIconButton(
-          icon: const Icon(
-            LucideIcons.messageSquareText,
-            color: AppColors.brandForest,
-          ),
-          onPressed: _startingListen ? null : _openEditor,
-          useOwnLayer: true,
-          size: 64,
-          iconSize: 26,
-          settings: const LiquidGlassSettings(glassColor: Colors.transparent),
-          semanticLabel: 'Describe the problem by text',
         ),
-        const SizedBox(width: 20),
-        _buildMicButton(),
+        const SizedBox(height: 8),
       ],
     );
   }
 
-  /// Circular mic affordance: black liquid glass, red + pulsing while the
-  /// mic is on.
-  Widget _buildMicButton() {
-    final listening = _mode == _PrepMode.listening;
-    final button = GlassIconButton(
-      icon: _startingListen
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.white,
-              ),
-            )
-          : const Icon(LucideIcons.mic, color: Colors.white),
-      onPressed: listening || _startingListen ? null : _startListening,
-      useOwnLayer: true,
-      size: 64,
-      iconSize: 26,
-      settings: LiquidGlassSettings(
-        glassColor: listening ? Colors.red.shade600 : Colors.black,
-      ),
-      semanticLabel: 'Describe the problem by voice',
-    );
-    if (!listening) {
-      return button;
-    }
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (_, child) => Transform.scale(
-        scale: 1 + _pulseController.value * 0.1,
-        child: child,
-      ),
-      child: button,
-    );
-  }
-
-  Widget _buildListening() {
+  /// Live listening stage: orb hero + two icon-only glass controls.
+  /// No text, no elastic pop — mic ticks repaint the orb alone.
+  Widget _buildListening({Key? key}) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      key: key,
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Preview wave in the middle of the dialog (voice_anim_kit Wave),
-        // driven by the live mic level.
-        WaveVisualizer(
-          isRecording: true,
-          amplitude: _voiceLevel,
-          color: AppColors.brandForest,
-          height: 96,
-          animationDuration: const Duration(seconds: 7),
-        ),
-        const SizedBox(height: 12),
-        // Live sound track on its own full-width row: scrolling bars
-        // (waveform_flutter) fed by the mic level, gold calm → forest loud.
-        SizedBox(
-          height: 60,
-          child: _ampStream == null
-              ? const SizedBox.shrink()
-              : AnimatedWaveList(
-                  stream: _ampStream!.stream,
-                  barBuilder: (animation, amplitude) {
-                    final double t = (amplitude.current / amplitude.max)
-                        .clamp(0.0, 1.0)
-                        .toDouble();
-                    return SizeTransition(
-                      sizeFactor: animation,
-                      axis: Axis.horizontal,
-                      child: SizedBox(
-                        height: 60,
-                        child: Center(
-                          child: Container(
-                            width: 4,
-                            height: 8 + t * 48,
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            decoration: BoxDecoration(
-                              color: Color.lerp(
-                                AppColors.brandGold,
-                                AppColors.brandForest,
-                                t,
-                              ),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        const SizedBox(height: 14),
-        // X + tick below the track. Springs in elastically the moment the
-        // circles give way to the recording controls.
-        TweenAnimationBuilder<double>(
-          tween: _controlsEnterTween,
-          duration: const Duration(milliseconds: 550),
-          curve: Curves.elasticOut,
-          builder: (_, v, child) => Opacity(
-            opacity: v.clamp(0.0, 1.0),
-            child: Transform.scale(scale: v <= 0 ? 0.0001 : v, child: child),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _glassControl(
-                icon: LucideIcons.x,
-                iconColor: AppColors.brandForest,
-                settings: const LiquidGlassSettings(
-                  glassColor: Colors.transparent,
-                ),
-                onTap: _cancelListening,
-                label: 'Cancel recording',
-              ),
-              _glassControl(
-                icon: LucideIcons.check,
-                iconColor: Colors.white,
-                settings: LiquidGlassSettings(glassColor: Colors.black),
-                onTap: () => _finishListening(auto: false),
-                label: 'Use recording',
-              ),
-            ],
+        Center(
+          child: ThinkingOrb(
+            size: 168,
+            state: ThinkingOrbState.listening,
+            // Hand the orb the live notifier directly: mic ticks then
+            // repaint the orb alone instead of rebuilding this subtree on
+            // every level tick.
+            amplitudeListenable: _voiceLevel,
           ),
         ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GlassIconButton(
+              icon: const Icon(
+                LucideIcons.x,
+                color: AppColors.brandForest,
+              ),
+              onPressed: _cancelListening,
+              useOwnLayer: true,
+              size: 56,
+              iconSize: 24,
+              settings: const LiquidGlassSettings(
+                glassColor: Colors.transparent,
+              ),
+              semanticLabel: 'Cancel recording',
+            ),
+            const SizedBox(width: 20),
+            GlassIconButton(
+              icon: const Icon(LucideIcons.check, color: Colors.white),
+              onPressed: () => _finishListening(auto: false),
+              useOwnLayer: true,
+              size: 56,
+              iconSize: 24,
+              settings: const LiquidGlassSettings(glassColor: Colors.black),
+              semanticLabel: 'Use recording',
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
       ],
     );
   }
 
-  /// Stable entrance tween: a fresh inline tween would restart the elastic
-  /// pop on every level-tick rebuild, so the instance stays put.
-  final Tween<double> _controlsEnterTween = Tween(begin: 0, end: 1);
-
-  /// Small glass circle for the recording row (X / tick).
-  Widget _glassControl({
-    required IconData icon,
-    required Color iconColor,
-    required LiquidGlassSettings settings,
-    required VoidCallback onTap,
-    required String label,
-  }) {
-    return GlassIconButton(
-      icon: Icon(icon, color: iconColor),
-      onPressed: onTap,
-      useOwnLayer: true,
-      size: 56,
-      iconSize: 24,
-      settings: settings,
-      semanticLabel: label,
-    );
-  }
-
-  /// X tap: discard the take and glide back to the chat/mic circles.
+  /// X tap: discard the take and glide back to the circles.
   void _cancelListening() {
     _stopIdleWave();
     _speech.stop();
-    _pulseController.stop();
+    _voiceLevel.value = 0;
     if (!mounted) {
       return;
     }
@@ -1044,8 +999,6 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       _startingListen = false;
       _mode = _PrepMode.options;
       _liveTranscript = '';
-      _voiceLevel = 0;
-      _micError = null;
     });
   }
 
@@ -1151,28 +1104,38 @@ class _FluidBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: animation,
-        builder: (_, _) => CustomPaint(
-          painter: _FluidBlobsPainter(animation.value),
-          // Warm base wash so the gradient reads even between blob passes,
-          // deepening toward the bottom where the circles sit.
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.brandGold.withValues(alpha: 0.08),
-                  AppColors.brandGold.withValues(alpha: 0.20),
-                  AppColors.brandGold.withValues(alpha: 0.32),
-                ],
-              ),
+    // Two layers so only the cheap one animates. The base wash is a static
+    // gradient that never repaints and stays in the raster cache; only the
+    // blob overlay is rebuilt per frame, which keeps the drifting layer from
+    // re-rasterising a full-screen gradient 60 times a second.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Warm base wash so the gradient reads even between blob passes,
+        // deepening toward the bottom where the circles sit.
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.brandGold.withValues(alpha: 0.08),
+                AppColors.brandGold.withValues(alpha: 0.20),
+                AppColors.brandGold.withValues(alpha: 0.32),
+              ],
             ),
           ),
         ),
-      ),
+        RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: animation,
+            builder: (_, _) => CustomPaint(
+              painter: _FluidBlobsPainter(animation.value),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

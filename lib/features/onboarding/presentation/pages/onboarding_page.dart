@@ -2,21 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../shared/widgets/brand_mark.dart';
-import '../../../auth/presentation/pages/login_page.dart';
+import '../../../shell/presentation/pages/main_shell.dart';
 
-/// Premium 2026 home-services onboarding.
+/// Functional onboarding like Urban Company / Snabbit / Pronto.
 ///
-/// Market pattern (Urban Company / Thumbtack / Taskrabbit):
-/// - clean white canvas, no baked waves or full-bleed stretched art
-/// - hero lives inside a rounded card so photography feels contained
-/// - one clear headline, muted body, slim segmented progress
-/// - single dark CTA with one gold arrow affordance
+/// Flownato UC flow (5 steps): phone -> location setup -> service area ->
+/// notifications -> Home. Snabbit: OTP -> location -> book -> OTP & relax.
+/// No service tour, no cards, no service-specific claims — the app is not
+/// limited to 3 services, so we never list any.
 ///
-/// The existing assets are good illustrations but they ship with a baked
-/// yellow/green wave footer (~bottom 18%). We deliberately crop that off
-/// in-code with [BoxFit.cover] + topCenter alignment inside a fixed card,
-/// so the design you liked stays, minus the cheap-looking wave.
+/// 4 quiet steps on warm paper:
+/// 0. Welcome (generic promise + social proof, one CTA)
+/// 1. Phone (UC step 1)
+/// 2. Location (UC steps 2-3, with Browse-anyway for non-serviceable)
+/// 3. Notifications (UC step 4, soft ask with skip)
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -28,87 +27,100 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final controller = PageController();
   int index = 0;
 
-  static const _steps = [
-    _StepData(
-      imagePath: 'assets/mrbob_onboarding/1.png',
-      eyebrow: 'Electrical',
-      title: 'Expert fixes at your doorstep',
-      body:
-          'Book verified electricians for safe switch, wiring and panel repairs — upfront pricing, on-time arrival.',
-      chip: 'Verified electricians',
-    ),
-    _StepData(
-      imagePath: 'assets/mrbob_onboarding/2.png',
-      eyebrow: 'Plumbing',
-      title: 'Plumbing help, right on time',
-      body:
-          'Get trained pros for leaks, fittings and bathroom repairs, with photo diagnosis before the visit.',
-      chip: 'Same-day slots',
-    ),
-    _StepData(
-      imagePath: 'assets/mrbob_onboarding/3.png',
-      eyebrow: 'Paint & finish',
-      title: 'Fresh finishes after move-in',
-      body:
-          'Handle paint touch-ups and post-construction snags without contractor chaos. One booking, done right.',
-      chip: 'Move-in ready',
-    ),
-  ];
+  final phoneController = TextEditingController();
+  final locationController = TextEditingController();
+  String? phoneError;
 
   @override
   void dispose() {
     controller.dispose();
+    phoneController.dispose();
+    locationController.dispose();
     super.dispose();
   }
 
-  void _goNext() {
-    if (index == _steps.length - 1) {
-      _finish();
-    } else {
-      controller.nextPage(
-        duration: const Duration(milliseconds: 380),
-        curve: Curves.easeOutCubic,
-      );
-    }
+  void _go(int page) {
+    controller.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+    );
   }
 
-  void _finish() {
+  void _enterApp() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: MainShell.routeName),
+        builder: (_) => const MainShell(),
+      ),
     );
+  }
+
+  void _submitPhone() {
+    final digits = phoneController.text.replaceAll(RegExp(r'\D'), '');
+    final number = digits.length == 12 && digits.startsWith('91')
+        ? digits.substring(2)
+        : digits;
+    if (number.length != 10) {
+      setState(() => phoneError = 'Enter a valid 10-digit mobile number.');
+      return;
+    }
+    setState(() => phoneError = null);
+    FocusScope.of(context).unfocus();
+    _go(2);
   }
 
   @override
   Widget build(BuildContext context) {
+    const canvas = Color(0xFFF7F5F0);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: canvas,
       body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.white),
+        value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: canvas),
         child: SafeArea(
           child: Column(
             children: [
-              _Header(isLast: index == _steps.length - 1, onSkip: _finish),
+              _TopBar(
+                step: index,
+                total: 4,
+                onSkip: _enterApp,
+              ),
               Expanded(
-                child: PageView.builder(
+                child: PageView(
                   controller: controller,
-                  itemCount: _steps.length,
                   physics: const BouncingScrollPhysics(),
-                  onPageChanged: (value) => setState(() => index = value),
-                  itemBuilder: (context, i) => _StepBody(step: _steps[i]),
+                  onPageChanged: (v) => setState(() => index = v),
+                  children: [
+                    _WelcomeStep(onStart: () => _go(1), onBrowse: _enterApp),
+                    _PhoneStep(
+                      controller: phoneController,
+                      error: phoneError,
+                      onChanged: (_) {
+                        if (phoneError != null) {
+                          setState(() => phoneError = null);
+                        }
+                      },
+                      onContinue: _submitPhone,
+                    ),
+                    _LocationStep(
+                      controller: locationController,
+                      onContinue: () => _go(3),
+                      onBrowse: _enterApp,
+                    ),
+                    _NotifyStep(
+                      onAllow: _enterApp,
+                      onSkip: _enterApp,
+                    ),
+                  ],
                 ),
               ),
-              _Footer(
+              _Bottom(
                 index: index,
-                pageCount: _steps.length,
-                title: _steps[index].title,
-                body: _steps[index].body,
-                eyebrow: _steps[index].eyebrow,
-                onNext: _goNext,
-                onBack: () => controller.previousPage(
-                  duration: const Duration(milliseconds: 320),
-                  curve: Curves.easeOutCubic,
-                ),
+                bottomInset: bottomInset,
+                onBack: index == 0 ? null : () => _go(index - 1),
               ),
             ],
           ),
@@ -118,75 +130,63 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 }
 
-class _StepData {
-  const _StepData({
-    required this.imagePath,
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-    required this.chip,
-  });
+// ---------------------------------------------------------------- chrome
 
-  final String imagePath;
-  final String eyebrow;
-  final String title;
-  final String body;
-  final String chip;
-}
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.step, required this.total, required this.onSkip});
 
-// ---------------------------------------------------------------- header
-
-class _Header extends StatelessWidget {
-  const _Header({required this.isLast, required this.onSkip});
-
-  final bool isLast;
+  final int step;
+  final int total;
   final VoidCallback onSkip;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(24, 10, 16, 2),
       child: Row(
         children: [
-          const BrandMark(size: 34),
-          const SizedBox(width: 10),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'MrBob',
-                style: TextStyle(
-                  color: AppColors.brandForest,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.4,
-                  height: 1.1,
-                ),
-              ),
-              Text(
-                'Home services, done right',
-                style: TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  height: 1.2,
-                ),
-              ),
-            ],
+          const Text(
+            'MrBob',
+            style: TextStyle(
+              color: AppColors.brandForest,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+            ),
           ),
-          const Spacer(),
-          // Ghost skip — no frosted pill floating over photography.
+          const SizedBox(width: 12),
+          // Slim quiet progress — functional, not marketing dots.
+          Expanded(
+            child: Row(
+              children: List.generate(
+                total,
+                (i) => Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: 3,
+                    margin: EdgeInsets.only(right: i == total - 1 ? 0 : 6),
+                    decoration: BoxDecoration(
+                      color: i <= step
+                          ? AppColors.brandForest
+                          : AppColors.brandForest.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           TextButton(
             onPressed: onSkip,
             style: TextButton.styleFrom(
               foregroundColor: AppColors.mutedText,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               textStyle: const TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            child: Text(isLast ? 'Done' : 'Skip'),
+            child: const Text('Skip'),
           ),
         ],
       ),
@@ -194,369 +194,452 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------- page body
+class _Bottom extends StatelessWidget {
+  const _Bottom({required this.index, required this.bottomInset, required this.onBack});
 
-class _StepBody extends StatelessWidget {
-  const _StepBody({required this.step});
-
-  final _StepData step;
+  final int index;
+  final double bottomInset;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Column(
-        children: [Expanded(child: _HeroCard(step: step))],
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 14 + bottomInset * 0.5),
+      child: Row(
+        children: [
+          if (onBack != null)
+            TextButton(
+              onPressed: onBack,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.mutedText,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              child: const Text('Back'),
+            ),
+          const Spacer(),
+          Text(
+            'Step ${index + 1} of 4',
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Contained hero card — this is the core "un-zoomed + premium" fix.
-///
-/// The source PNGs are tall portraits with a baked wave footer. By fixing
-/// the card height (flex) and using cover+topCenter, Flutter scales the
-/// image to fill the width and crops the bottom wave away. Nothing is
-/// stretched, faces stay in frame, edges get a soft premium treatment.
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.step});
+// ---------------------------------------------------------- shared bits
 
-  final _StepData step;
+class _StepShell extends StatelessWidget {
+  const _StepShell({
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    required this.child,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String body;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceTint,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.borderSubtle),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            blurRadius: 28,
-            offset: Offset(0, 14),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            eyebrow.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.6,
+            ),
           ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.brandForest,
+              fontSize: 30,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.8,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            body,
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 14.5,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 26),
+          child,
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(15),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Top-anchored so the baked bottom wave is the first thing
-            // cropped out on every screen size.
-            Image.asset(
-              step.imagePath,
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-              filterQuality: FilterQuality.high,
-            ),
-            // Soft bottom scrim so the floating chip always reads well,
-            // without the old full-screen white wash that looked muddy.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.62, 1.0],
-                  colors: [Color(0x00000000), Color(0x140D230D)],
-                ),
-              ),
-            ),
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.borderSubtle),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.star_rounded,
-                      size: 14,
-                      color: AppColors.brandForest,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      '4.8 · Trusted pros',
-                      style: TextStyle(
-                        color: AppColors.brandForest,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandForest,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 16,
-                          height: 16,
-                          decoration: const BoxDecoration(
-                            color: AppColors.brandGold,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            size: 11,
-                            color: AppColors.brandForest,
-                          ),
-                        ),
-                        const SizedBox(width: 7),
-                        Text(
-                          step.chip,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    );
+  }
+}
+
+class _PrimaryButton extends StatelessWidget {
+  const _PrimaryButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.brandForest,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+          ),
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+}
+
+class _QuietInput extends StatelessWidget {
+  const _QuietInput({
+    required this.controller,
+    required this.hint,
+    this.keyboardType,
+    this.prefix,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final TextInputType? keyboardType;
+  final Widget? prefix;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      onChanged: onChanged,
+      onSubmitted: (_) => onSubmitted?.call(),
+      style: const TextStyle(
+        color: AppColors.brandForest,
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+      ),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.white,
+        hintText: hint,
+        prefixIcon: prefix,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: AppColors.borderSubtle),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: AppColors.brandForest, width: 1.2),
         ),
       ),
     );
   }
 }
 
-// ------------------------------------------------------------- footer
+// --------------------------------------------------------------- steps
 
-class _Footer extends StatelessWidget {
-  const _Footer({
-    required this.index,
-    required this.pageCount,
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-    required this.onNext,
-    required this.onBack,
-  });
+/// Step 0 — generic promise. No services named, no cards.
+class _WelcomeStep extends StatelessWidget {
+  const _WelcomeStep({required this.onStart, required this.onBrowse});
 
-  final int index;
-  final int pageCount;
-  final String eyebrow;
-  final String title;
-  final String body;
-  final VoidCallback onNext;
-  final VoidCallback onBack;
+  final VoidCallback onStart;
+  final VoidCallback onBrowse;
 
   @override
   Widget build(BuildContext context) {
-    final isLast = index == pageCount - 1;
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 18, 20, 12 + bottomInset * 0.5),
+    return _StepShell(
+      eyebrow: 'MrBob',
+      title: 'Home help,\nwithout the hassle.',
+      body:
+          'Verified pros for whatever your home needs — cleaning, repairs and everything in between. Upfront pricing, on-time arrival.',
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween(
-                  begin: const Offset(0.08, 0),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
+          _PrimaryButton(label: 'Get started', onTap: onStart),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: onBrowse,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandForest,
+              minimumSize: const Size.fromHeight(56),
+              side: const BorderSide(color: AppColors.borderSubtle),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            child: Column(
-              key: ValueKey(title),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 22,
-                      height: 2.5,
-                      decoration: BoxDecoration(
-                        color: AppColors.brandGold,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      eyebrow.toUpperCase(),
-                      style: const TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.brandForest,
-                    fontSize: 25,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.6,
-                    height: 1.12,
+            child: const Text('Browse the app'),
+          ),
+          const SizedBox(height: 18),
+          const Row(
+            children: [
+              Icon(Icons.verified_outlined,
+                  size: 15, color: AppColors.mutedText),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Background-checked pros · 4.8 rated · Pay after service',
+                  style: TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                    height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  body,
-                  style: const TextStyle(
-                    color: AppColors.mutedText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    height: 1.5,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Step 1 — UC "Enter phone number".
+class _PhoneStep extends StatelessWidget {
+  const _PhoneStep({
+    required this.controller,
+    required this.error,
+    required this.onChanged,
+    required this.onContinue,
+  });
+
+  final TextEditingController controller;
+  final String? error;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StepShell(
+      eyebrow: 'Step 1 · Account',
+      title: "What's your\nnumber?",
+      body:
+          'We use it to confirm bookings and share your pro’s arrival updates. No spam, ever.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _QuietInput(
+            controller: controller,
+            hint: '98765 43210',
+            keyboardType: TextInputType.phone,
+            onChanged: onChanged,
+            onSubmitted: onContinue,
+            prefix: const Padding(
+              padding: EdgeInsets.only(left: 18, right: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '+91',
+                    style: TextStyle(
+                      color: AppColors.brandForest,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  SizedBox(
+                    height: 22,
+                    child: VerticalDivider(
+                      color: AppColors.borderSubtle,
+                      thickness: 1,
+                      width: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: const TextStyle(
+                color: Color(0xFFC0392B),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _PrimaryButton(label: 'Continue', onTap: onContinue),
+        ],
+      ),
+    );
+  }
+}
+
+/// Steps 2-3 — UC "Choose location setup / Select service area".
+/// Includes Browse-anyway so non-serviceable users are never blocked
+/// (Snabbit teardown lesson).
+class _LocationStep extends StatelessWidget {
+  const _LocationStep({
+    required this.controller,
+    required this.onContinue,
+    required this.onBrowse,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onContinue;
+  final VoidCallback onBrowse;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StepShell(
+      eyebrow: 'Step 2 · Location',
+      title: 'Where do you\nneed help?',
+      body:
+          'We check which pros can reach you fastest. If we’re not in your area yet, you can still look around.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _QuietInput(
+            controller: controller,
+            hint: 'Search area, landmark or pincode',
+            keyboardType: TextInputType.text,
+            onSubmitted: onContinue,
+            prefix: const Icon(
+              Icons.location_on_outlined,
+              color: AppColors.mutedText,
+              size: 20,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () {},
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandForest,
+              minimumSize: const Size.fromHeight(52),
+              side: const BorderSide(color: AppColors.borderSubtle),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            icon: const Icon(Icons.my_location_outlined, size: 18),
+            label: const Text('Use my current location'),
+          ),
+          const SizedBox(height: 16),
+          _PrimaryButton(label: 'Confirm location', onTap: onContinue),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onBrowse,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.mutedText,
+              textStyle: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            child: const Text('Not sure yet? Browse the app first'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Step 4 — UC "Choose notifications", soft version with skip.
+class _NotifyStep extends StatelessWidget {
+  const _NotifyStep({required this.onAllow, required this.onSkip});
+
+  final VoidCallback onAllow;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StepShell(
+      eyebrow: 'Step 3 · Updates',
+      title: 'Know when\nyour pro arrives.',
+      body:
+          'Booking confirmations and arrival alerts only. You can turn these off anytime.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.notifications_outlined,
+                    color: AppColors.brandForest, size: 22),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '“Your pro is 10 mins away”\n“Booking confirmed for today, 4 PM”',
+                    style: TextStyle(
+                      color: AppColors.brandForest,
+                      fontSize: 13.5,
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Row(
-                  children: List.generate(
-                    pageCount,
-                    (dot) => Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        height: 4,
-                        margin: EdgeInsets.only(
-                          right: dot == pageCount - 1 ? 0 : 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: dot <= index
-                              ? AppColors.brandForest
-                              : AppColors.border,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '${(index + 1).toString().padLeft(2, '0')} / ${pageCount.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              if (index > 0)
-                Container(
-                  width: 58,
-                  height: 58,
-                  margin: const EdgeInsets.only(right: 10),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border),
-                    color: Colors.white,
-                  ),
-                  child: IconButton(
-                    onPressed: onBack,
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: AppColors.brandForest,
-                    ),
-                    tooltip: 'Back',
-                  ),
-                ),
-              Expanded(
-                child: SizedBox(
-                  height: 58,
-                  child: FilledButton(
-                    onPressed: onNext,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.brandForest,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.only(left: 22, right: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            isLast ? 'Get started' : 'Next',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            color: AppColors.brandGold,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isLast
-                                ? Icons.check_rounded
-                                : Icons.arrow_forward_rounded,
-                            color: AppColors.brandForest,
-                            size: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+          _PrimaryButton(label: 'Allow notifications', onTap: onAllow),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onSkip,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.mutedText,
+              textStyle: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
               ),
-            ],
+            ),
+            child: const Text('Maybe later'),
           ),
         ],
       ),

@@ -41,8 +41,6 @@ dependencies:
   liquid_glass_widgets:
     path: vendor/liquid_glass_widgets
   speech_to_text: ^7.5.0
-  waveform_flutter: ^1.2.0
-  voice_anim_kit: ^0.3.0
 
 dev_dependencies:
   flutter_test:
