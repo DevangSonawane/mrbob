@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../../core/data/services_data.dart';
-import '../../../../shared/widgets/thinking_orb.dart';
+import '../../../../shared/widgets/voice_beam.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -75,22 +76,14 @@ class _HomePageState extends State<HomePage> {
               // so overscroll feels native on every phone.
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                // ---- One single green header (one visual unit, three
-                // sibling slivers — the search MUST stay a direct
-                // viewport child with pinned:true, otherwise it only
-                // pins within the group and scrolls away deep in
-                // the list). Location scrolls away, search sticks to
-                // the viewport, promo banner scrolls away. ----
-                SliverPersistentHeader(
-                  pinned: false,
-                  delegate: _LocationBarDelegate(
-                    scale: scale,
-                    horizontalInset: horizontalInset,
-                  ),
-                ),
+                // ---- One single green header (Paytm-style collapsing unit,
+                // pinned:true so it sticks to the viewport). Scroll and the
+                // search glides diagonally up into the header slot while
+                // bell/profile fade out — collapsed = location + search only.
+                // Promo banner scrolls away beneath it. ----
                 SliverPersistentHeader(
                   pinned: true,
-                  delegate: _StickySearchDelegate(
+                  delegate: _CollapsingHeaderDelegate(
                     scale: scale,
                     horizontalInset: horizontalInset,
                     modeFilter: _modeFilter,
@@ -567,9 +560,89 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   /// arrives, so the visuals never sit dead on slower devices.
   Timer? _idleWaveTimer;
 
+  /// Demo fallback when the recognizer is unavailable (denied/simulator):
+  /// streams sample words + synthetic levels so the beam + word-by-word
+  /// still play exactly as with a live mic.
+  Timer? _demoTimer;
+
+  /// Fires once if a live session hears nothing useful, so the UI can
+  /// say so instead of hanging on "Listening…" forever.
+  Timer? _noSpeechTimer;
+  bool _showNoSpeechHint = false;
+
+  /// Settle phase: the recogniser has finalised and we hold the beam in its
+  /// `processing` sweep for one travel before opening the editor. This is the
+  /// libraries.dev/voice `processing={thinking}` moment — in this flow the
+  /// "work in progress" is turning speech into the final transcript, and
+  /// without this the sweep would only ever run during mic init, which lasts
+  /// a few milliseconds and is never actually seen.
+  Timer? _settleTimer;
+  bool _settling = false;
+
+  /// One full beam travel, matched to VoiceBeam.processingDuration.
+  static const _settleDelay = Duration(milliseconds: 1100);
+  static const _demoWords = <String>[
+    'My',
+    'kitchen',
+    'tap',
+    'is',
+    'leaking',
+    'and',
+    'I',
+    'need',
+    'a',
+    'plumber',
+    'tomorrow',
+    'morning',
+  ];
+
   void _stopIdleWave() {
     _idleWaveTimer?.cancel();
     _idleWaveTimer = null;
+  }
+
+  void _stopDemo() {
+    _demoTimer?.cancel();
+    _demoTimer = null;
+  }
+
+  void _disarmNoSpeechHint() {
+    _noSpeechTimer?.cancel();
+    _noSpeechTimer = null;
+  }
+
+  void _stopSettle() {
+    _settleTimer?.cancel();
+    _settleTimer = null;
+  }
+
+  void _armNoSpeechHint() {
+    _disarmNoSpeechHint();
+    _showNoSpeechHint = false;
+    _noSpeechTimer = Timer(const Duration(seconds: 7), () {
+      if (!mounted || _mode != _PrepMode.listening) return;
+      if (_liveTranscript.trim().isEmpty) {
+        setState(() => _showNoSpeechHint = true);
+      }
+    });
+  }
+
+  /// Mic unavailable: play the same UI with scripted words + levels.
+  void _startDemoStream() {
+    _stopIdleWave();
+    _stopDemo();
+    var i = 0;
+    _demoTimer = Timer.periodic(const Duration(milliseconds: 340), (_) {
+      if (!mounted || _mode != _PrepMode.listening) return;
+      final t = DateTime.now().millisecondsSinceEpoch / 1000;
+      // Synthetic voice dynamics drive the beam like real mic levels.
+      _voiceLevel.value =
+          (0.35 + 0.3 * math.sin(t * 5.1) * math.sin(t * 2.3)).clamp(0.0, 1.0);
+      if (i < _demoWords.length) {
+        setState(() => _liveTranscript =
+            _demoWords.sublist(0, ++i).join(' '));
+      }
+    });
   }
 
   void _startIdleWave() {
@@ -587,6 +660,8 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   /// Silent failure exit: back to the circles, no error text.
   void _abortListen() {
     _stopIdleWave();
+    _stopDemo();
+    _disarmNoSpeechHint();
     _speech.stop();
     if (!mounted) {
       return;
@@ -624,9 +699,15 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
 
   /// Chat circle tap: morph the glass dialog into the text editor and snap
   /// the sheet to the full detent. Same flow continues from there.
-  void _openEditor() {
-    _autofocusEditor = true;
-    setState(() => _mode = _PrepMode.describe);
+  /// [autofocus] is false when arriving from a voice transcript, so the
+  /// keyboard does not cover the transcript the user just reviewed.
+  void _openEditor({bool autofocus = true}) {
+    _stopSettle();
+    setState(() {
+      _settling = false;
+      _autofocusEditor = autofocus;
+      _mode = _PrepMode.describe;
+    });
     widget.sheetController.snapToState(GlassSheetState.full);
   }
 
@@ -642,6 +723,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   @override
   void dispose() {
     _stopIdleWave();
+    _stopDemo();
+    _disarmNoSpeechHint();
+    _stopSettle();
     _voiceLevel.dispose();
     _fluidController.dispose();
     _speech.stop();
@@ -664,6 +748,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       _startingListen = true;
       _mode = _PrepMode.listening;
       _liveTranscript = '';
+      _showNoSpeechHint = false;
     });
     // The sheet stays on its medium detent — tapping the mic must not resize
     // the stage. The gradient simply hands off to the opaque white fill.
@@ -684,7 +769,11 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
         },
       );
       if (!available) {
-        _abortListen();
+        // No recognizer (simulator/denied): demo the identical UI so the
+        // beam + word-by-word can still be reviewed.
+        if (!mounted) return;
+        setState(() => _startingListen = false);
+        _startDemoStream();
         return;
       }
       if (!mounted) {
@@ -696,10 +785,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           if (!mounted) {
             return;
           }
+          // Every partial streams in word-by-word; finals just keep the
+          // words on screen and keep listening until pause/Stop.
           setState(() => _liveTranscript = result.recognizedWords);
-          if (result.finalResult) {
-            _finishListening(auto: true);
-          }
         },
         onSoundLevelChange: _handleSoundLevel,
         listenOptions: SpeechListenOptions(
@@ -709,6 +797,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           cancelOnError: true,
         ),
       );
+      // If the engine hears nothing (routed mic, offline recognizer),
+      // say so instead of hanging on "Listening…" forever.
+      _armNoSpeechHint();
     } catch (_) {
       if (!mounted) {
         return;
@@ -726,6 +817,8 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   /// circles silently — no "did not catch that" dead-ends.
   Future<void> _finishListening({required bool auto}) async {
     _stopIdleWave();
+    _stopDemo();
+    _disarmNoSpeechHint();
     await _speech.stop();
     if (!mounted) {
       return;
@@ -737,16 +830,26 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
         TextPosition(offset: _textController.text.length),
       );
     }
-    setState(() {
-      if (heard.isNotEmpty || !auto) {
-        _mode = _PrepMode.describe;
-        _autofocusEditor = false;
-        widget.sheetController.snapToState(GlassSheetState.full);
-      } else {
-        // Engine stopped on its own without hearing anything.
-        _mode = _PrepMode.options;
-      }
-    });
+    // Auto-stop with something heard: hold one full beam sweep in its
+    // `processing` state, then open the editor. The sweep is the only
+    // feedback between the last word and the editor appearing, and it is
+    // what the libraries.dev/voice demo shows for `processing={thinking}`.
+    if (auto && heard.isNotEmpty) {
+      _stopSettle();
+      setState(() => _settling = true);
+      _settleTimer = Timer(_settleDelay, () {
+        _stopSettle();
+        _openEditor(autofocus: false);
+      });
+      return;
+    }
+    // Manual confirmation skips the wait — the user already committed.
+    if (heard.isNotEmpty || !auto) {
+      _openEditor(autofocus: false);
+      return;
+    }
+    // Engine stopped on its own without hearing anything.
+    setState(() => _mode = _PrepMode.options);
   }
 
   void _close(_BookingPrepAction action, [String description = '']) {
@@ -934,25 +1037,53 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     );
   }
 
-  /// Live listening stage: orb hero + two icon-only glass controls.
-  /// No text, no elastic pop — mic ticks repaint the orb alone.
+  /// Live listening stage — exact libraries.dev/voice layout: the glow
+  /// wraps the chat box itself (no orb), transcript streams word-by-word
+  /// inside it. Mic ticks repaint only the beam via [_voiceLevel].
   Widget _buildListening({Key? key}) {
     return Column(
       key: key,
       mainAxisAlignment: MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: ThinkingOrb(
-            size: 168,
-            state: ThinkingOrbState.listening,
-            // Hand the orb the live notifier directly: mic ticks then
-            // repaint the orb alone instead of rebuilding this subtree on
-            // every level tick.
-            amplitudeListenable: _voiceLevel,
+        VoiceBeam(
+          levelListenable: _voiceLevel,
+          // Sweeps while the mic opens AND through the settle pass after the
+          // recogniser finalises — the only moment the travel is visible.
+          processing: _startingListen || _settling,
+          type: VoiceBeamType.standard,
+          // Brand palette rather than the upstream rainbow: on a pale glass
+          // panel a saturated forest/gold beam reads as ours, where the
+          // multi-hue one turns to confetti.
+          colorVariant: VoiceBeamColorVariant.forest,
+          theme: VoiceBeamTheme.light,
+          borderRadius: 22,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            // Frosted panel, not a black box: the transcript reads as app text
+            // on glass, and the beam has a real surface to sit on.
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                constraints: const BoxConstraints(
+                  minHeight: 132,
+                  maxHeight: 172,
+                ),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.62),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    width: 1,
+                  ),
+                ),
+                child: _buildLiveTranscript(),
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -987,9 +1118,73 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     );
   }
 
+  /// Word-by-word live transcript on the frosted panel. Newest word fades in
+  /// and takes the brand forest at full strength, settled words step back to
+  /// a readable muted grey; the caret blinks gold at the end.
+  Widget _buildLiveTranscript() {
+    final heard = _liveTranscript.trim();
+    if (heard.isEmpty) {
+      return Center(
+        child: Text(
+          _showNoSpeechHint
+              ? 'Still listening… try speaking a little louder'
+              : 'Listening…',
+          style: const TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      );
+    }
+    final words = heard.split(RegExp(r'\s+'));
+    // Keep the tail visible on long takes.
+    final tail = words.length > 40 ? words.sublist(words.length - 40) : words;
+    final offset = words.length - tail.length;
+    return SingleChildScrollView(
+      reverse: true,
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (var i = 0; i < tail.length; i++)
+            TweenAnimationBuilder<double>(
+              key: ValueKey('${offset + i}:${tail[i]}'),
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 180),
+              builder: (context, opacity, child) => Opacity(
+                opacity: i == tail.length - 1 ? opacity : 1,
+                child: child,
+              ),
+              child: Text(
+                tail[i],
+                style: TextStyle(
+                  // Newest word is the one still being revised, so it carries
+                  // the emphasis; settled words recede but stay legible.
+                  color: i == tail.length - 1
+                      ? AppColors.brandForest
+                      : AppColors.mutedText,
+                  fontSize: 16,
+                  fontWeight: i == tail.length - 1
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                  height: 1.4,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          const _BlinkingCaret(color: AppColors.brandGold),
+        ],
+      ),
+    );
+  }
+
   /// X tap: discard the take and glide back to the circles.
   void _cancelListening() {
     _stopIdleWave();
+    _stopDemo();
+    _disarmNoSpeechHint();
     _speech.stop();
     _voiceLevel.value = 0;
     if (!mounted) {
@@ -1097,9 +1292,58 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
 /// Slow-drifting fluid gradient behind the booking dialog content: soft
 /// neutral green blobs wandering on Lissajous paths at low alpha, so the
 /// frosted sheet feels alive while text stays legible.
+/// Blinking caret trailing the live transcript — the focused-input feel
+/// from the voice-glow demo. Cheap 1Hz opacity loop, isolated repaint.
+class _BlinkingCaret extends StatefulWidget {
+  const _BlinkingCaret({this.color = AppColors.brandForest});
+
+  final Color color;
+
+  @override
+  State<_BlinkingCaret> createState() => _BlinkingCaretState();
+}
+
+class _BlinkingCaretState extends State<_BlinkingCaret>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blink;
+
+  @override
+  void initState() {
+    super.initState();
+    _blink = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1060),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _blink,
+      builder: (_, _) => Opacity(
+        opacity: _blink.value < 0.5 ? 1 : 0,
+        child: Container(
+          width: 2,
+          height: 16,
+          margin: const EdgeInsets.only(top: 3),
+          decoration: BoxDecoration(
+            color: widget.color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FluidBackdrop extends StatelessWidget {
   const _FluidBackdrop({required this.animation});
-
   final Animation<double> animation;
 
   @override
@@ -1190,6 +1434,8 @@ class _FluidBlobsPainter extends CustomPainter {
       oldDelegate.progress != progress;
 }
 
+/// Dummy payment screen: order summary, fake method picker, and a Pay now
+/// action that records the booking and returns to the home (first) route.
 /// Dummy payment screen: order summary, fake method picker, and a Pay now
 /// action that records the booking and returns to the home (first) route.
 class _PaymentPage extends StatefulWidget {
@@ -1913,8 +2159,14 @@ class _AllCategoryCard extends StatelessWidget {
 /// Fixed height (always fits the 52px search card + padding, so the yellow
 /// can never clip/cover the search). SafeArea above handles the status
 /// bar, so no notch overlap on any phone.
-class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
-  _StickySearchDelegate({
+/// Paytm-style collapsing header: expanded = location row + big search.
+/// Scroll and the search glides diagonally up into the header slot while
+/// bell/profile fade out with the location row — collapsed = compact
+/// location + mini search in a single pinned row. Scroll-linked via
+/// shrinkOffset (no controller needed); one shared [_SearchBar] instance
+/// so typing/focus state never splits.
+class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _CollapsingHeaderDelegate({
     required this.scale,
     required this.horizontalInset,
     required this.modeFilter,
@@ -1926,13 +2178,16 @@ class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
   final BookingMode? modeFilter;
   final ValueChanged<BookingMode?> onModeFilterChanged;
 
-  // 8 top + 52 search + 8 bottom = 68. Fixed (not scaled) so the search
-  // card can never overflow and get covered, on any screen width.
-  @override
-  double get minExtent => 68;
+  static const _locationHeight = 64.0;
+  // 8 top + 52 search + 8 bottom. Fixed so the search card can never
+  // overflow and get covered, on any screen width.
+  static const _searchHeight = 68.0;
 
   @override
-  double get maxExtent => 68;
+  double get minExtent => _searchHeight;
+
+  @override
+  double get maxExtent => _locationHeight + _searchHeight;
 
   @override
   Widget build(
@@ -1940,21 +2195,102 @@ class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    final t = (shrinkOffset / _locationHeight).clamp(0.0, 1.0);
+    // Smoothstep for fades/widths. Heights stay LINEAR in t so the column
+    // total always equals the sliver extent exactly (eased heights drift
+    // off-extent mid-transition = RenderFlex overflow + yellow stripes).
+    final e = t * t * (3 - 2 * t);
     return Container(
       color: _homeHeaderColor,
-      padding: EdgeInsets.fromLTRB(horizontalInset, 8, horizontalInset, 8),
-      // The mode menu owns view filtering; the typed query is still a
-      // no-op for a future grid filter.
-      child: _SearchBar(
-        onChanged: (_) {},
-        modeFilter: modeFilter,
-        onModeFilterChanged: onModeFilterChanged,
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          // Location row (pin + address + bell + profile) collapses away.
+          // OverflowBox lets the fixed 64px content exceed the shrinking
+          // box without asserting; ClipRect clips the paint.
+          ClipRect(
+            child: SizedBox(
+              height: _locationHeight * (1 - t),
+              child: OverflowBox(
+                minHeight: 0,
+                maxHeight: _locationHeight,
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  height: _locationHeight,
+                  child: Opacity(
+                    opacity: (1 - e * 1.4).clamp(0.0, 1.0),
+                    child: Transform.translate(
+                      offset: Offset(0, -28 * e),
+                      child: Container(
+                        color: _homeHeaderColor,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalInset,
+                          vertical: 10,
+                        ),
+                        child: _LocationBar(scale: scale),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Search row: pin icon fades in on the left while the shared
+          // search box glides up beside it — the diagonal move. Icon-only
+          // (no text) so the search keeps plenty of width when collapsed.
+          Container(
+            height: _searchHeight,
+            color: _homeHeaderColor,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                ClipRect(
+                  // 48 fits the left inset + 22px pin at any screen width.
+                  child: SizedBox(
+                    width: 48 * e,
+                    child: Opacity(
+                      opacity: e.clamp(0.0, 1.0),
+                      child: Padding(
+                        padding: EdgeInsets.only(left: horizontalInset),
+                        child: const SizedBox(
+                          height: 52,
+                          child: Icon(
+                            LucideIcons.mapPin,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 6 * e),
+                Expanded(
+                  child: Padding(
+                    // Left inset melts away as the mini location takes it.
+                    padding: EdgeInsets.only(
+                      left: horizontalInset * (1 - e),
+                      right: horizontalInset,
+                    ),
+                    // The mode menu owns view filtering; the typed query is
+                    // still a no-op for a future grid filter.
+                    child: _SearchBar(
+                      onChanged: (_) {},
+                      modeFilter: modeFilter,
+                      onModeFilterChanged: onModeFilterChanged,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   @override
-  bool shouldRebuild(covariant _StickySearchDelegate oldDelegate) =>
+  bool shouldRebuild(covariant _CollapsingHeaderDelegate oldDelegate) =>
       oldDelegate.scale != scale ||
       oldDelegate.horizontalInset != horizontalInset ||
       oldDelegate.modeFilter != modeFilter ||
@@ -2121,38 +2457,6 @@ class _SearchBarState extends State<_SearchBar> {
       ),
     );
   }
-}
-
-/// Pinned location bar delegate: fixed 64px gold strip, always on top.
-class _LocationBarDelegate extends SliverPersistentHeaderDelegate {
-  _LocationBarDelegate({required this.scale, required this.horizontalInset});
-
-  final double scale;
-  final double horizontalInset;
-
-  @override
-  double get minExtent => 64;
-
-  @override
-  double get maxExtent => 64;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      color: _homeHeaderColor,
-      padding: EdgeInsets.symmetric(horizontal: horizontalInset, vertical: 10),
-      child: _LocationBar(scale: scale),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _LocationBarDelegate oldDelegate) =>
-      oldDelegate.scale != scale ||
-      oldDelegate.horizontalInset != horizontalInset;
 }
 
 /// Blinkit-style location row: pin + address left, actions right.
