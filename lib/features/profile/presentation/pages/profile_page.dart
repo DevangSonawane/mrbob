@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../../shared/widgets/simple_page.dart';
 import '../../../../shared/widgets/support_tile.dart';
 import '../../../refer/presentation/pages/refer_page.dart';
@@ -46,13 +47,13 @@ class ProfilePage extends StatelessWidget {
                   // ---- Title header (tab page: no back chevron) ----
                   Container(
                     color: Colors.white,
-                    padding: EdgeInsets.fromLTRB(s(20), s(18), s(20), s(6)),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
                     alignment: Alignment.centerLeft,
-                    child: Text(
+                    child: const Text(
                       'Account',
                       style: TextStyle(
                         color: AppColors.brandForest,
-                        fontSize: s(23),
+                        fontSize: 23,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.4,
                       ),
@@ -266,7 +267,10 @@ class _ProfileHeader extends StatelessWidget {
               right: 0,
               bottom: 0,
               child: GestureDetector(
-                onTap: onStatusTap,
+                onTap: () {
+                  AppHaptics.press();
+                  onStatusTap();
+                },
                 child: Container(
                   width: s(24),
                   height: s(24),
@@ -294,7 +298,10 @@ class _ProfileHeader extends StatelessWidget {
         ),
         SizedBox(height: s(16)),
         GestureDetector(
-          onTap: onEdit,
+          onTap: () {
+            AppHaptics.press();
+            onEdit();
+          },
           behavior: HitTestBehavior.opaque,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -409,7 +416,10 @@ class _AccountActionCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          AppHaptics.press();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(s(24)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(s(24)),
@@ -586,7 +596,10 @@ class _ManageAccountRow extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: data.onTap,
+        onTap: () {
+          AppHaptics.press();
+          data.onTap();
+        },
         child: Padding(
           padding: EdgeInsets.fromLTRB(s(16), s(15), s(14), s(15)),
           child: Row(

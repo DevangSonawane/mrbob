@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/booking.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 
 class BookingSuccessPage extends StatelessWidget {
   const BookingSuccessPage({super.key, required this.booking});
@@ -48,7 +49,10 @@ class BookingSuccessPage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: () => Navigator.pop(context, booking),
+                onPressed: () {
+                  AppHaptics.press();
+                  Navigator.pop(context, booking);
+                },
                 icon: const Icon(LucideIcons.receiptText),
                 label: const Text('View my bookings'),
               ),

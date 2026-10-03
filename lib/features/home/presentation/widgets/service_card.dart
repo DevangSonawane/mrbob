@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 
 class ServiceCard extends StatelessWidget {
   const ServiceCard({super.key, required this.service, required this.onTap});
@@ -18,7 +19,10 @@ class ServiceCard extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppColors.radiusCard),
-        onTap: onTap,
+        onTap: () {
+          AppHaptics.press();
+          onTap();
+        },
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(

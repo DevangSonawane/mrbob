@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/booking.dart';
+import '../../../../core/utils/app_haptics.dart';
 
 /// Booking detail, matching the payment-failed reference screen exactly:
 /// pink header zone with back button, red scalloped seal + title, and a
@@ -38,7 +39,10 @@ class BookingDetailPage extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      AppHaptics.press();
+                      Navigator.of(context).pop();
+                    },
                     icon: const Icon(LucideIcons.arrowLeft),
                     color: _ink,
                     iconSize: 22,
@@ -352,7 +356,10 @@ class _ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        AppHaptics.press();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(12),
       child: Row(
         children: [

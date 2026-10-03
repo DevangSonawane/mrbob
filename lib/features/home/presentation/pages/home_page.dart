@@ -14,6 +14,7 @@ import '../../../../shared/widgets/voice_beam.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
 const _homeHeaderColor = Color(0xFF02462E);
@@ -190,6 +191,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openService(BuildContext context, ServiceItem service) async {
+    AppHaptics.press();
     final selectedSlot = await _showSlotPicker(context, service);
     if (!context.mounted || selectedSlot == null) {
       return;
@@ -439,6 +441,7 @@ class _HomePageState extends State<HomePage> {
                       glassColor: AppColors.brandForest,
                     ),
                     onTap: () {
+                      AppHaptics.confirm();
                       Navigator.pop(
                         context,
                         _SelectedSlot(selectedDay.title, selectedTime),
@@ -816,6 +819,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   /// the transcript loaded for review. Empty auto-stop glides back to the
   /// circles silently — no "did not catch that" dead-ends.
   Future<void> _finishListening({required bool auto}) async {
+    // Auto-stop glides back on its own; only the manual "use recording" tap
+    // deserves a haptic.
+    if (!auto) AppHaptics.confirm();
     _stopIdleWave();
     _stopDemo();
     _disarmNoSpeechHint();
@@ -853,6 +859,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   }
 
   void _close(_BookingPrepAction action, [String description = '']) {
+    AppHaptics.press();
     _speech.stop();
     Navigator.pop(context, _BookingPrepData(action, description));
   }
@@ -1002,7 +1009,12 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
                 LucideIcons.messageSquareText,
                 color: AppColors.brandForest,
               ),
-              onPressed: _startingListen ? null : _openEditor,
+              onPressed: _startingListen
+                  ? null
+                  : () {
+                      AppHaptics.press();
+                      _openEditor();
+                    },
               useOwnLayer: true,
               size: 68,
               iconSize: 26,
@@ -1182,6 +1194,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
 
   /// X tap: discard the take and glide back to the circles.
   void _cancelListening() {
+    AppHaptics.press();
     _stopIdleWave();
     _stopDemo();
     _disarmNoSpeechHint();
@@ -1236,6 +1249,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
             Expanded(
               child: OutlinedButton(
                 onPressed: () {
+                  AppHaptics.press();
                   setState(() => _mode = _PrepMode.options);
                   widget.sheetController.snapToState(GlassSheetState.half);
                 },
@@ -1473,6 +1487,7 @@ class _PaymentPageState extends State<_PaymentPage> {
     if (_paying) {
       return;
     }
+    AppHaptics.confirm();
     setState(() => _paying = true);
     // Fake gateway delay.
     await Future.delayed(const Duration(milliseconds: 1200));
@@ -1647,7 +1662,11 @@ class _PaymentPageState extends State<_PaymentPage> {
                 borderRadius: BorderRadius.circular(15),
                 onTap: _paying
                     ? null
-                    : () => setState(() => _methodIndex = entry.$1),
+                    : () {
+                        if (entry.$1 == _methodIndex) return;
+                        AppHaptics.tick();
+                        setState(() => _methodIndex = entry.$1);
+                      },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1907,7 +1926,10 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: _returnHome,
+                onPressed: () {
+                  AppHaptics.press();
+                  _returnHome();
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.brandForest,
                   side: const BorderSide(color: AppColors.borderSubtle),
@@ -1924,7 +1946,10 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed: _returnHome,
+                onPressed: () {
+                  AppHaptics.press();
+                  _returnHome();
+                },
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.brandForest,
                   foregroundColor: Colors.white,
@@ -2063,7 +2088,10 @@ class _AllCategoryCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(15),
       elevation: 0,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          AppHaptics.press();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(15),
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -2332,6 +2360,8 @@ class _SearchBarState extends State<_SearchBar> {
   }
 
   void _selectMode(BookingMode? mode) {
+    if (mode == widget.modeFilter) return;
+    AppHaptics.tick();
     widget.onModeFilterChanged?.call(mode);
     _menuController.close();
   }
@@ -2347,6 +2377,7 @@ class _SearchBarState extends State<_SearchBar> {
   /// is safe. The search field is unfocused first so an open keyboard can't
   /// cover the freshly opened menu.
   void _openFilterMenu() {
+    AppHaptics.press();
     FocusScope.of(context).unfocus();
     _menuController.open();
   }
@@ -2916,7 +2947,10 @@ class _CategoryTile extends StatelessWidget {
     final assetPath = _categoryAssetPath(service);
 
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        AppHaptics.press();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(15),
       child: Column(
         children: [
@@ -3021,7 +3055,10 @@ class _PopularServiceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         elevation: 0,
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            AppHaptics.press();
+            onTap();
+          },
           borderRadius: BorderRadius.circular(15),
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -3240,7 +3277,10 @@ class _PopularServiceCard extends StatelessWidget {
                             SizedBox(
                               height: 31 * scale,
                               child: FilledButton(
-                                onPressed: onTap,
+                                onPressed: () {
+                                  AppHaptics.press();
+                                  onTap();
+                                },
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.brandForest,
                                   foregroundColor: Colors.white,

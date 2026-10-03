@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/booking.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../widgets/booking_card.dart';
 import 'booking_detail_page.dart';
 
@@ -60,13 +61,16 @@ class _BookingsPageState extends State<BookingsPage> {
                 children: [
                   for (final booking in filtered) ...[
                     GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              BookingDetailPage(booking: booking),
-                        ),
-                      ),
+                      onTap: () {
+                        AppHaptics.press();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                BookingDetailPage(booking: booking),
+                          ),
+                        );
+                      },
                       child: BookingCard(booking: booking),
                     ),
                     const SizedBox(height: 14),
@@ -182,7 +186,10 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 18),
           if (onBrowse != null)
             FilledButton(
-              onPressed: onBrowse,
+              onPressed: () {
+                AppHaptics.press();
+                onBrowse?.call();
+              },
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.brandForest,
                 foregroundColor: Colors.white,

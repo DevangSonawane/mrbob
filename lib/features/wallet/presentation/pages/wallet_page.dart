@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 
 class WalletPage extends StatelessWidget {
   const WalletPage({super.key});
@@ -32,10 +33,13 @@ class WalletPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _AddMoneyCard(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const _AddMoneyPage()),
-              ),
+              onTap: () {
+                AppHaptics.press();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const _AddMoneyPage()),
+                );
+              },
             ),
           ],
         ),
@@ -228,6 +232,8 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
   final _amounts = const [200, 500, 1000, 2000];
 
   void _selectAmount(int amount) {
+    if (amount == _selectedAmount) return;
+    AppHaptics.tick();
     setState(() => _selectedAmount = amount);
   }
 
@@ -246,7 +252,10 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      AppHaptics.press();
+                      Navigator.pop(context);
+                    },
                     icon: const Icon(LucideIcons.arrowLeft),
                     color: AppColors.mutedText,
                     tooltip: 'Back',
@@ -364,7 +373,10 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
             height: 52,
             width: double.infinity,
             child: FilledButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                AppHaptics.confirm();
+                Navigator.pop(context);
+              },
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF02462E),
                 foregroundColor: Colors.white,

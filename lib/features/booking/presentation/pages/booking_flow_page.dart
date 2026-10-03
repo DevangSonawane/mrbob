@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../widgets/payment_option.dart';
 import '../widgets/price_breakdown.dart';
 import 'booking_success_page.dart';
@@ -124,6 +125,8 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             ],
             selected: {mode},
             onSelectionChanged: (value) {
+              if (value.first == mode) return;
+              AppHaptics.tick();
               setState(() {
                 mode = value.first;
                 slot = mode == 'Instant' ? 'ASAP, 20 min' : 'Today, 4:30 PM';
@@ -190,7 +193,11 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             subtitle: 'UPI, card, wallet. Faster checkout and instant invoice.',
             icon: LucideIcons.creditCard,
             selected: payment == 'Pay now',
-            onTap: () => setState(() => payment = 'Pay now'),
+            onTap: () {
+              if (payment == 'Pay now') return;
+              AppHaptics.tick();
+              setState(() => payment = 'Pay now');
+            },
           ),
           const SizedBox(height: 10),
           PaymentOption(
@@ -198,7 +205,11 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
             subtitle: 'Pay after OTP verification and service completion.',
             icon: LucideIcons.truck,
             selected: payment == 'Pay on delivery',
-            onTap: () => setState(() => payment = 'Pay on delivery'),
+            onTap: () {
+              if (payment == 'Pay on delivery') return;
+              AppHaptics.tick();
+              setState(() => payment = 'Pay on delivery');
+            },
           ),
           const SizedBox(height: 18),
           PriceBreakdown(
@@ -245,6 +256,7 @@ class _BookingFlowPageState extends State<BookingFlowPage> {
               ),
               FilledButton.icon(
                 onPressed: () {
+                  AppHaptics.confirm();
                   final booking = Booking(
                     service: widget.service,
                     mode: mode,

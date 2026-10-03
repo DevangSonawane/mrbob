@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../../shared/widgets/brand_mark.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
@@ -35,6 +36,7 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
   }
 
   void _enterApp() {
+    AppHaptics.confirm();
     FocusScope.of(context).unfocus();
     Navigator.pushReplacement(
       context,
@@ -67,7 +69,10 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                         border: Border.all(color: AppColors.border),
                       ),
                       child: IconButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          AppHaptics.press();
+                          Navigator.pop(context);
+                        },
                         padding: EdgeInsets.zero,
                         icon: const Icon(
                           Icons.chevron_left_rounded,
@@ -230,9 +235,12 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                               size: 20,
                             ),
                             suffixIcon: IconButton(
-                              onPressed: () => setState(
-                                () => obscurePassword = !obscurePassword,
-                              ),
+                              onPressed: () {
+                                AppHaptics.tick();
+                                setState(
+                                  () => obscurePassword = !obscurePassword,
+                                );
+                              },
                               icon: Icon(
                                 obscurePassword
                                     ? Icons.visibility_outlined
@@ -264,9 +272,12 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                               size: 20,
                             ),
                             suffixIcon: IconButton(
-                              onPressed: () => setState(
-                                () => obscureConfirm = !obscureConfirm,
-                              ),
+                              onPressed: () {
+                                AppHaptics.tick();
+                                setState(
+                                  () => obscureConfirm = !obscureConfirm,
+                                );
+                              },
                               icon: Icon(
                                 obscureConfirm
                                     ? Icons.visibility_outlined
@@ -282,8 +293,10 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
 
                       // Promo opt-in as a card, not a bare checkbox row.
                       GestureDetector(
-                        onTap: () =>
-                            setState(() => receivePromos = !receivePromos),
+                        onTap: () {
+                          AppHaptics.tick();
+                          setState(() => receivePromos = !receivePromos);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -415,16 +428,16 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.pop(context),
+                          onTap: () {
+                            AppHaptics.press();
+                            Navigator.pop(context);
+                          },
                           child: const Text(
                             'Sign in',
                             style: TextStyle(
                               color: AppColors.brandForest,
                               fontSize: 13.5,
                               fontWeight: FontWeight.w800,
-                              decoration: TextDecoration.underline,
-                              decorationColor: AppColors.brandGold,
-                              decorationThickness: 2,
                             ),
                           ),
                         ),

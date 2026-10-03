@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../../../core/data/services_data.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_haptics.dart';
 import '../../../bookings/presentation/pages/bookings_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
@@ -79,7 +80,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final screens = [
       HomePage(onBooked: _addBooking),
-      BookingsPage(bookings: bookings, onBrowse: () => setState(() => tab = 0)),
+      BookingsPage(bookings: bookings, onBrowse: () => _selectTab(0)),
       const WalletPage(),
       const ProfilePage(),
     ];
@@ -93,7 +94,7 @@ class _MainShellState extends State<MainShell> {
       body: screens[tab],
       bottomBar: GlassTabBar.bottom(
         selectedIndex: tab,
-        onTabSelected: (value) => setState(() => tab = value),
+        onTabSelected: _selectTab,
         tabs: _tabs,
         // Slim metrics: slightly smaller pill, tighter icon rhythm.
         // Safe with icon-only tabs (no label text left to overflow).
@@ -124,7 +125,18 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  void _selectTab(int value) {
+    // Re-tapping the current tab is a no-op, so it stays silent.
+    if (value == tab) return;
+    // Light impact rather than a selection tick: a page swap is the loudest
+    // interaction in the app, and selectionClick is too subtle to feel over
+    // the tab bar's own spring animation.
+    AppHaptics.press();
+    setState(() => tab = value);
+  }
+
   void _addBooking(Booking booking) {
+    AppHaptics.confirm();
     setState(() {
       bookings.insert(0, booking);
       tab = 1;
