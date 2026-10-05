@@ -67,7 +67,6 @@ flutter:
   assets:
     - assets/electrician.png
     - assets/service_cat/
-    - assets/mrbob_onboarding/
     - assets/login/
     - assets/icons/
 

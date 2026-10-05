@@ -7,7 +7,7 @@ import '../../../../shared/widgets/thinking_orb.dart';
 ///
 /// Run temporarily as home to eyeball it:
 /// `home: const ThinkingOrbDemoPage(),`
-/// then swap back to OnboardingPage when done.
+/// then swap back to LoginPage when done.
 class ThinkingOrbDemoPage extends StatefulWidget {
   const ThinkingOrbDemoPage({super.key});
 
@@ -39,11 +39,7 @@ class _ThinkingOrbDemoPageState extends State<ThinkingOrbDemoPage> {
               border: Border.all(color: AppColors.borderSubtle),
             ),
             child: Center(
-              child: ThinkingOrb(
-                size: 160,
-                state: _state,
-                amplitude: _amp,
-              ),
+              child: ThinkingOrb(size: 160, state: _state, amplitude: _amp),
             ),
           ),
           const SizedBox(height: 18),
@@ -104,21 +100,9 @@ class _ThinkingOrbDemoPageState extends State<ThinkingOrbDemoPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ThinkingOrb(
-                size: 64,
-                state: _state,
-                amplitude: _amp,
-              ),
-              ThinkingOrb(
-                size: 96,
-                state: _state,
-                amplitude: _amp,
-              ),
-              ThinkingOrb(
-                size: 160,
-                state: _state,
-                amplitude: _amp,
-              ),
+              ThinkingOrb(size: 64, state: _state, amplitude: _amp),
+              ThinkingOrb(size: 96, state: _state, amplitude: _amp),
+              ThinkingOrb(size: 160, state: _state, amplitude: _amp),
             ],
           ),
         ],

@@ -1,26 +1,21 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'email_login_page.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
-// Exact clone of Trumarks onboarding design
-// (trumarkz/lib/features/onboarding/presentation/pages/onboarding_page.dart)
-// applied to the MrBob Get Started / login page, using
-// assets/login/loginpage.png as the hero image.
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final double systemBottomInset = MediaQuery.of(context).viewPadding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: AnnotatedRegion<SystemUiOverlayStyle>(
         value: const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
@@ -32,146 +27,44 @@ class LoginPage extends StatelessWidget {
           bottom: false,
           child: Stack(
             children: <Widget>[
-              Positioned.fill(
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 222 + bottomInset,
                 child: Image.asset(
                   'assets/login/loginpage.png',
                   fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
+                  alignment: Alignment.bottomCenter,
                 ),
               ),
-              Positioned.fill(
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 222 + bottomInset,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: <Color>[
+                        Colors.black.withAlpha(32),
                         Colors.black.withAlpha(0),
-                        Colors.black.withAlpha(0),
-                        Colors.black.withAlpha(150),
+                        Colors.transparent,
                       ],
-                      stops: const <double>[0, 0.58, 1],
+                      stops: const <double>[0, 0.36, 0.7],
                     ),
                   ),
                 ),
               ),
               Align(
                 alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    20,
-                    24,
-                    48 + systemBottomInset,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 330),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        const Column(
-                          children: <Widget>[
-                            _LoginTitleLine(text: 'Every care,'),
-                            SizedBox(height: 8),
-                            _LoginTitleLine(text: 'handled.'),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Align(
-                          child: SizedBox(
-                            width: 252,
-                            child: _PrimaryLoginButton(
-                              onPressed: null,
-                              label: 'Continue with E-mail',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Divider(color: Colors.white.withAlpha(45)),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Or',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withAlpha(105),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Divider(color: Colors.white.withAlpha(45)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            SizedBox(
-                              width: 76,
-                              child: _IconAuthButton(
-                                onPressed: () => _enterApp(context),
-                                icon: SvgPicture.asset(
-                                  'assets/icons/google.svg',
-                                  width: 20,
-                                  height: 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            SizedBox(
-                              width: 76,
-                              child: _IconAuthButton(
-                                onPressed: () => _enterApp(context),
-                                icon: SvgPicture.asset(
-                                  'assets/icons/apple.svg',
-                                  width: 22,
-                                  height: 22,
-                                  colorFilter: const ColorFilter.mode(
-                                    Colors.white,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withAlpha(165),
-                              height: 1.35,
-                            ),
-                            children: <InlineSpan>[
-                              const TextSpan(
-                                text: 'By continuing you agree to\n',
-                              ),
-                              TextSpan(
-                                text: 'Terms of Services & Privacy Policy.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white,
-                                  decorationThickness: 1.1,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: _LoginSheet(
+                  bottomInset: bottomInset,
+                  onContinue: () => _openPhoneLogin(context),
+                  onGoogle: () => _enterApp(context),
+                  onApple: () => _enterApp(context),
                 ),
               ),
             ],
@@ -181,7 +74,15 @@ class LoginPage extends StatelessWidget {
     );
   }
 
-  void _enterApp(BuildContext context) {
+  void _openPhoneLogin(BuildContext context) {
+    AppHaptics.press();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EmailLoginPage()),
+    );
+  }
+
+  static void _enterApp(BuildContext context) {
     AppHaptics.confirm();
     Navigator.pushReplacement(
       context,
@@ -193,134 +94,307 @@ class LoginPage extends StatelessWidget {
   }
 }
 
-// Builder wrapper so the primary button can navigate while staying
-// visually identical to the Trumarks onboarding button.
-class _PrimaryLoginButton extends StatelessWidget {
-  const _PrimaryLoginButton({required this.onPressed, required this.label});
+class _LoginSheet extends StatelessWidget {
+  const _LoginSheet({
+    required this.bottomInset,
+    required this.onContinue,
+    required this.onGoogle,
+    required this.onApple,
+  });
 
-  final VoidCallback? onPressed;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Builder(
-      builder: (context) {
-        return ElevatedButton(
-          onPressed: () {
-            AppHaptics.press();
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const EmailLoginPage()),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(46),
-            elevation: 0,
-            foregroundColor: Colors.black,
-            disabledForegroundColor: Colors.grey,
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(999),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.black,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _LoginTitleLine extends StatelessWidget {
-  const _LoginTitleLine({required this.text});
-
-  final String text;
+  final double bottomInset;
+  final VoidCallback onContinue;
+  final VoidCallback onGoogle;
+  final VoidCallback onApple;
 
   @override
   Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(
-        text,
-        maxLines: 1,
-        softWrap: false,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 26,
-          color: Colors.white,
-          fontWeight: FontWeight.w300,
-          height: 1,
-        ),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Color(0x1F000000),
+            blurRadius: 14,
+            offset: Offset(0, -5),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _IconAuthButton extends StatelessWidget {
-  const _IconAuthButton({required this.onPressed, required this.icon});
-
-  final VoidCallback? onPressed;
-  final Widget icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool enabled = onPressed != null;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            child: Container(
-              height: 46,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: <Color>[
-                    Colors.white.withAlpha(enabled ? 64 : 28),
-                    Colors.white.withAlpha(enabled ? 22 : 12),
-                  ],
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(18, 16, 18, 12 + bottomInset),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 370),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Text(
+                'Log in or sign up',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF242938),
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
                 ),
-                border: Border.all(
-                  color: Colors.white.withAlpha(enabled ? 130 : 54),
-                  width: 1,
-                ),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.black.withAlpha(18),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
+              ),
+              const SizedBox(height: 13),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 340;
+                  return Row(
+                    children: <Widget>[
+                      _CountryCodeButton(
+                        width: compact ? 76 : 96,
+                        compact: compact,
+                      ),
+                      SizedBox(width: compact ? 7 : 10),
+                      Expanded(
+                        child: _PhoneNumberField(
+                          compact: compact,
+                          onSubmitted: onContinue,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 43,
+                child: FilledButton(
+                  onPressed: onContinue,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandForest,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  BoxShadow(
-                    color: Colors.white.withAlpha(28),
-                    blurRadius: 10,
-                    offset: const Offset(-2, -2),
+                  child: const Text(
+                    'Continue',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _SocialButton(
+                      onPressed: onGoogle,
+                      child: SvgPicture.asset(
+                        'assets/icons/google.svg',
+                        width: 21,
+                        height: 21,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SocialButton(
+                      onPressed: onApple,
+                      child: SvgPicture.asset(
+                        'assets/icons/apple.svg',
+                        width: 23,
+                        height: 23,
+                        colorFilter: const ColorFilter.mode(
+                          Colors.black,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              alignment: Alignment.center,
-              child: IconTheme(
-                data: IconThemeData(
-                  color: enabled ? Colors.white : Colors.grey,
+              const SizedBox(height: 17),
+              Text(
+                'By continuing, you agree to our',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: const Color(0xFF242938).withAlpha(220),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w500,
                 ),
-                child: icon,
               ),
-            ),
+              const SizedBox(height: 4),
+              const _PolicyLinks(),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CountryCodeButton extends StatelessWidget {
+  const _CountryCodeButton({required this.width, required this.compact});
+
+  final double width;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFE7E9EF), width: 1.1),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          _IndiaFlag(compact: compact),
+          SizedBox(width: compact ? 6 : 9),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Colors.grey.shade600,
+            size: compact ? 20 : 22,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IndiaFlag extends StatelessWidget {
+  const _IndiaFlag({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: SvgPicture.asset(
+        'assets/icons/india_flag.svg',
+        width: compact ? 24 : 27,
+        height: compact ? 16 : 18,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+class _PhoneNumberField extends StatelessWidget {
+  const _PhoneNumberField({required this.compact, required this.onSubmitted});
+
+  final bool compact;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFE7E9EF), width: 1.1),
+      ),
+      child: Row(
+        children: <Widget>[
+          SizedBox(width: compact ? 9 : 12),
+          Text(
+            '+91',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: compact ? 13 : 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(width: compact ? 6 : 9),
+          Expanded(
+            child: TextField(
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+              onSubmitted: (_) => onSubmitted(),
+              style: TextStyle(
+                color: const Color(0xFF242938),
+                fontSize: compact ? 13 : 15,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Enter Mobile Number',
+                hintStyle: TextStyle(
+                  color: const Color(0xFF9EA2AE),
+                  fontSize: compact ? 12.5 : 15,
+                  fontWeight: FontWeight.w600,
+                ),
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isCollapsed: true,
+              ),
+            ),
+          ),
+          SizedBox(width: compact ? 6 : 9),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  const _SocialButton({required this.onPressed, required this.child});
+
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFF3F4F7),
+          foregroundColor: AppColors.brandForest,
+          elevation: 0,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _PolicyLinks extends StatelessWidget {
+  const _PolicyLinks();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+      color: Color(0xFF242938),
+      fontSize: 9,
+      fontWeight: FontWeight.w500,
+      decoration: TextDecoration.underline,
+      decorationColor: Color(0xFF242938),
+      decorationThickness: 0.8,
+    );
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 5,
+      children: const <Widget>[
+        Text('Terms of Service', style: style),
+        Text('Privacy Policy', style: style),
+        Text('Content Policies', style: style),
+      ],
     );
   }
 }

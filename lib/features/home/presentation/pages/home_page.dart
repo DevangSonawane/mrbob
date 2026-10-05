@@ -639,11 +639,10 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       if (!mounted || _mode != _PrepMode.listening) return;
       final t = DateTime.now().millisecondsSinceEpoch / 1000;
       // Synthetic voice dynamics drive the beam like real mic levels.
-      _voiceLevel.value =
-          (0.35 + 0.3 * math.sin(t * 5.1) * math.sin(t * 2.3)).clamp(0.0, 1.0);
+      _voiceLevel.value = (0.35 + 0.3 * math.sin(t * 5.1) * math.sin(t * 2.3))
+          .clamp(0.0, 1.0);
       if (i < _demoWords.length) {
-        setState(() => _liveTranscript =
-            _demoWords.sublist(0, ++i).join(' '));
+        setState(() => _liveTranscript = _demoWords.sublist(0, ++i).join(' '));
       }
     });
   }
@@ -1100,10 +1099,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             GlassIconButton(
-              icon: const Icon(
-                LucideIcons.x,
-                color: AppColors.brandForest,
-              ),
+              icon: const Icon(LucideIcons.x, color: AppColors.brandForest),
               onPressed: _cancelListening,
               useOwnLayer: true,
               size: 56,
@@ -1512,7 +1508,7 @@ class _PaymentPageState extends State<_PaymentPage> {
     );
     // Back to the existing home shell. If the shell route name is not present
     // in an older stack, reset to a fresh shell instead of falling through to
-    // Login/onboarding.
+    // login.
     var foundHome = false;
     Navigator.of(context).popUntil((route) {
       foundHome = route.settings.name == MainShell.routeName;
@@ -3028,6 +3024,7 @@ class _CategoryTile extends StatelessWidget {
       'Electrical snags' => 'assets/electrician.png',
       'Painting repairs' => 'assets/service_cat/painting.png',
       'Carpentry fixes' => 'assets/service_cat/carpenting.png',
+      'Deep inspection' => 'assets/service_cat/inspection.png',
       _ => null,
     };
   }

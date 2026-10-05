@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'core/theme/app_theme.dart';
-import 'features/onboarding/presentation/pages/onboarding_page.dart';
+import 'features/auth/presentation/pages/login_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,7 +52,7 @@ class MrBobApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'MrBob',
       theme: AppTheme.light,
-      home: const OnboardingPage(),
+      home: const LoginPage(),
     );
   }
 }
