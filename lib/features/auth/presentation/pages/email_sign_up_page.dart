@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../shared/widgets/brand_mark.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
+import 'customer_onboarding_page.dart';
 
 /// Matches [EmailLoginPage]: white canvas, brand header, boxed AppTheme
 /// fields, forest 58 CTA with gold arrow — not the old underline form.
@@ -24,6 +28,7 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
   bool obscurePassword = true;
   bool obscureConfirm = true;
   bool receivePromos = true;
+  bool _isSigningUp = false;
 
   @override
   void dispose() {
@@ -35,15 +40,93 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
     super.dispose();
   }
 
-  void _enterApp() {
-    AppHaptics.confirm();
+  /// `POST /auth/signup` — creates a CUSTOMER account.
+  /// First-time signups then complete onboarding
+  /// (city + profile) before entering the app.
+  Future<void> _enterApp() async {
+    final name =
+        '${firstNameController.text.trim()} ${lastNameController.text.trim()}'.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    final confirm = confirmPasswordController.text;
+
+    if (name.isEmpty) {
+      _showError('Enter your name');
+      return;
+    }
+    if (!email.contains('@')) {
+      _showError('Enter a valid email address');
+      return;
+    }
+    if (password.length < 8) {
+      _showError('Password must be at least 8 characters');
+      return;
+    }
+    if (password != confirm) {
+      _showError('Passwords do not match');
+      return;
+    }
+
     FocusScope.of(context).unfocus();
+    setState(() => _isSigningUp = true);
+    try {
+      final session = await AuthService.instance.signup(
+        name: name,
+        email: email,
+        password: password,
+      );
+      AppHaptics.success();
+      if (!mounted) return;
+
+      final onboarded =
+          session.user.isOnboarded ||
+          await _fetchOnboarded();
+      if (!mounted) return;
+
+      if (onboarded) {
+        _goToShell();
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CustomerOnboardingPage(
+              name: name,
+              phone: session.user.phone,
+            ),
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _isSigningUp = false);
+    }
+  }
+
+  Future<bool> _fetchOnboarded() async {
+    try {
+      final status = await OnboardingService.instance.getStatus();
+      return status.isOnboarded;
+    } on ApiException catch (_) {
+      return false;
+    }
+  }
+
+  void _goToShell() {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         settings: const RouteSettings(name: MainShell.routeName),
         builder: (_) => const MainShell(),
       ),
+    );
+  }
+
+  void _showError(String message) {
+    AppHaptics.press();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -375,7 +458,7 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                       height: 58,
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: _enterApp,
+                        onPressed: _isSigningUp ? null : _enterApp,
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.brandForest,
                           foregroundColor: Colors.white,
@@ -386,33 +469,42 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Create account',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.2,
+                        child: _isSigningUp
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
                                 ),
+                              )
+                            : Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      'Create account',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.brandGold,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: AppColors.brandForest,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                color: AppColors.brandGold,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_rounded,
-                                color: AppColors.brandForest,
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                     const SizedBox(height: 14),

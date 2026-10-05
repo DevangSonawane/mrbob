@@ -9,10 +9,19 @@ import '../widgets/booking_card.dart';
 import 'booking_detail_page.dart';
 
 class BookingsPage extends StatefulWidget {
-  const BookingsPage({super.key, required this.bookings, this.onBrowse});
+  const BookingsPage({
+    super.key,
+    required this.bookings,
+    this.onBrowse,
+    this.onChanged,
+  });
 
   final List<Booking> bookings;
   final VoidCallback? onBrowse;
+
+  /// Reloads the bookings list after a detail-page
+  /// status transition.
+  final VoidCallback? onChanged;
 
   @override
   State<BookingsPage> createState() => _BookingsPageState();
@@ -67,7 +76,10 @@ class _BookingsPageState extends State<BookingsPage> {
                           context,
                           MaterialPageRoute(
                             builder: (_) =>
-                                BookingDetailPage(booking: booking),
+                                BookingDetailPage(
+                                  booking: booking,
+                                  onChanged: widget.onChanged,
+                                ),
                           ),
                         );
                       },

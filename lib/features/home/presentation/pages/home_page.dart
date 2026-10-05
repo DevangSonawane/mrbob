@@ -11,8 +11,14 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../../core/data/services_data.dart';
 import '../../../../shared/widgets/voice_beam.dart';
+import '../../../../core/models/api/service_category.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/booking_service.dart';
+import '../../../../core/services/catalog_service.dart';
+import '../../../../core/services/payment_service.dart';
+import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
@@ -1485,24 +1491,34 @@ class _PaymentPageState extends State<_PaymentPage> {
     }
     AppHaptics.confirm();
     setState(() => _paying = true);
-    // Fake gateway delay.
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) {
-      return;
-    }
-    widget.onPaid(
-      Booking(
+
+    Booking booked;
+    String? notice;
+    try {
+      booked = await _createBooking();
+    } on ApiException catch (_) {
+      // Backend unreachable or the service has no backend
+      // category yet — record the booking locally so the
+      // demo stays usable offline.
+      booked = Booking(
         service: widget.service,
         mode: BookingMode.scheduled.label,
         slot: widget.slotLabel,
         payment: _methods[_methodIndex].label,
         total: _total,
-      ),
-    );
+      );
+      notice = 'Couldn\'t reach the server — booking saved locally (demo).';
+    }
+
+    if (!mounted) {
+      return;
+    }
+    widget.onPaid(booked);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Payment successful — your professional will be assigned shortly.',
+          notice ??
+              'Payment successful — your professional will be assigned shortly.',
         ),
       ),
     );
@@ -1523,6 +1539,93 @@ class _PaymentPageState extends State<_PaymentPage> {
         (_) => false,
       );
     }
+  }
+
+  /// `POST /bookings` — creates the booking on the backend,
+  /// then `POST /payments/bookings/{id}/order` when paying
+  /// online (the Razorpay order id would be handed to the
+  /// Razorpay SDK in a production build).
+  Future<Booking> _createBooking() async {
+    final categories = await CatalogService.instance.getCategories();
+    final category = _matchCategory(categories, widget.service.title);
+    if (category == null) {
+      throw const ApiException(
+        'Service not available in your area yet',
+      );
+    }
+
+    final address =
+        TokenStore.instance.user?.address ?? 'Selected location';
+
+    final created = await BookingService.instance.create(
+      categoryId: category.id,
+      address: address,
+      scheduledAt: _parseSlot(widget.slotLabel),
+    );
+
+    if (_methods[_methodIndex].label != 'Cash after service') {
+      await PaymentService.instance.createOrder(created.id);
+    }
+
+    return Booking(
+      id: created.id,
+      service: widget.service,
+      mode: BookingMode.scheduled.label,
+      slot: widget.slotLabel,
+      payment: _methods[_methodIndex].label,
+      total: _total,
+      status: BookingStatus.confirmed,
+    );
+  }
+
+  /// Matches a local catalog service to a backend category
+  /// by name (exact first, then fuzzy containment).
+  ServiceCategory? _matchCategory(
+    List<ServiceCategory> categories,
+    String title,
+  ) {
+    final normalized = title.toLowerCase();
+    for (final category in categories) {
+      if (category.name.toLowerCase() == normalized) {
+        return category;
+      }
+    }
+    for (final category in categories) {
+      final name = category.name.toLowerCase();
+      if (normalized.contains(name) || name.contains(normalized)) {
+        return category;
+      }
+    }
+    return null;
+  }
+
+  /// Parses 'Today, 4pm' style slot labels into a
+  /// date-time for the booking's `scheduledAt`.
+  DateTime? _parseSlot(String slotLabel) {
+    final parts = slotLabel.split(', ');
+    if (parts.length != 2) {
+      return null;
+    }
+    final day = parts[0];
+    final now = DateTime.now();
+    late final DateTime date;
+    if (day == 'Today') {
+      date = now;
+    } else if (day == 'Tomorrow') {
+      date = now.add(const Duration(days: 1));
+    } else {
+      date = now.add(const Duration(days: 2));
+    }
+    final match = RegExp(r'(\d+)(am|pm)').firstMatch(parts[1]);
+    if (match == null) {
+      return date;
+    }
+    final hour = int.parse(match.group(1)!);
+    var h24 = hour % 12;
+    if (match.group(2) == 'pm') {
+      h24 += 12;
+    }
+    return DateTime(date.year, date.month, date.day, h24);
   }
 
   @override

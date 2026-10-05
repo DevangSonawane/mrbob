@@ -41,6 +41,8 @@ dependencies:
   liquid_glass_widgets:
     path: vendor/liquid_glass_widgets
   speech_to_text: ^7.5.0
+  http: ^1.4.0
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:

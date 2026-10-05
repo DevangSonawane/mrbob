@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../../core/data/booking_mapper.dart';
 import '../../../../core/data/services_data.dart';
 import '../../../../core/models/booking.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/booking_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../bookings/presentation/pages/bookings_page.dart';
@@ -23,7 +26,12 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int tab = 0;
-  final bookings = <Booking>[
+  late List<Booking> bookings;
+
+  /// Demo data shown until the API responds — and kept as the
+  /// offline fallback when the backend is unreachable. A
+  /// successful (even empty) API response replaces it.
+  static final _demoBookings = <Booking>[
     Booking(
       service: services.first,
       mode: 'Scheduled',
@@ -49,6 +57,27 @@ class _MainShellState extends State<MainShell> {
       status: BookingStatus.completed,
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    bookings = _demoBookings;
+    _loadBookings();
+  }
+
+  /// `GET /bookings` — the customer's own bookings.
+  Future<void> _loadBookings() async {
+    try {
+      final apiBookings = await BookingService.instance.list();
+      if (!mounted) return;
+      setState(() {
+        bookings = apiBookings.map(mapApiBooking).toList();
+      });
+    } on ApiException catch (_) {
+      // Backend unreachable — keep the demo bookings so the
+      // app stays usable offline.
+    }
+  }
 
   /// Icon-only tabs ([GlassTab.label] left null so the icon centers —
   /// text labels overflowed their cells at large system font sizes).
@@ -80,7 +109,11 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final screens = [
       HomePage(onBooked: _addBooking),
-      BookingsPage(bookings: bookings, onBrowse: () => _selectTab(0)),
+      BookingsPage(
+        bookings: bookings,
+        onBrowse: () => _selectTab(0),
+        onChanged: _loadBookings,
+      ),
       const WalletPage(),
       const ProfilePage(),
     ];

@@ -4,12 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/models/api/zone_models.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/catalog_service.dart';
+import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
 class EmailLoginPage extends StatefulWidget {
-  const EmailLoginPage({super.key});
+  const EmailLoginPage({super.key, required this.phone});
+
+  /// Phone number captured on the login sheet, in E.164 form
+  /// ('+91…'). Sent to `/auth/otp/verify` and, for first-time
+  /// logins, to `/onboarding/customer`.
+  final String phone;
 
   @override
   State<EmailLoginPage> createState() => _EmailLoginPageState();
@@ -27,7 +37,15 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   int _step = 0;
   String _gender = 'Male';
 
-  static const _stepCount = 3;
+  /// API call in flight (OTP verify / onboarding complete).
+  bool _isVerifying = false;
+  bool _isOnboarding = false;
+
+  /// Cities from `GET /zones/cities` — required by
+  /// `/onboarding/customer`, so the address step lets the
+  /// customer pick theirs.
+  List<City> _cities = const [];
+  String? _selectedCityId;
 
   @override
   void initState() {
@@ -35,6 +53,21 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _otpFocusNode.requestFocus();
     });
+    _loadCities();
+  }
+
+  Future<void> _loadCities() async {
+    try {
+      final cities = await CatalogService.instance.getCities();
+      if (!mounted) return;
+      setState(() {
+        _cities = cities;
+        _selectedCityId = cities.isNotEmpty ? cities.first.id : null;
+      });
+    } on ApiException catch (_) {
+      // City list unavailable — the address step surfaces the
+      // error when the customer confirms.
+    }
   }
 
   @override
@@ -50,17 +83,106 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   String get _buttonLabel => 'Next';
 
   Future<void> _next() async {
-    AppHaptics.confirm();
-
-    if (_step < _stepCount - 1) {
+    if (_step == 0) {
+      await _verifyOtp();
+      return;
+    }
+    if (_step == 1) {
+      AppHaptics.confirm();
       await _pageController.nextPage(
         duration: const Duration(milliseconds: 520),
         curve: Curves.easeOutCubic,
       );
       return;
     }
+    await _completeOnboarding();
+  }
 
-    AppHaptics.success();
+  /// Step 1: `POST /auth/otp/verify`. Creates the user on
+  /// first login; returning customers skip straight in.
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+    if (otp.length != 4) {
+      AppHaptics.press();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter the 4-digit code')),
+      );
+      return;
+    }
+
+    setState(() => _isVerifying = true);
+    try {
+      final session = await AuthService.instance.verifyOtp(
+        widget.phone,
+        otp,
+      );
+      AppHaptics.confirm();
+
+      final onboarded =
+          session.user.isOnboarded || await _fetchOnboarded();
+      if (onboarded) {
+        _enterApp();
+        return;
+      }
+      if (!mounted) return;
+      await _pageController.nextPage(
+        duration: const Duration(milliseconds: 520),
+        curve: Curves.easeOutCubic,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
+  }
+
+  Future<bool> _fetchOnboarded() async {
+    try {
+      final status = await OnboardingService.instance.getStatus();
+      return status.isOnboarded;
+    } on ApiException catch (_) {
+      return false;
+    }
+  }
+
+  /// Step 3: `POST /onboarding/customer` — completes the
+  /// profile (name, phone, city, service address).
+  Future<void> _completeOnboarding() async {
+    final cityId = _selectedCityId;
+    if (cityId == null) {
+      AppHaptics.press();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select your city to continue')),
+      );
+      return;
+    }
+
+    setState(() => _isOnboarding = true);
+    try {
+      await OnboardingService.instance.completeCustomerOnboarding(
+        cityId: cityId,
+        name: _nameController.text.trim(),
+        phone: widget.phone,
+        address: 'Selected location',
+      );
+      AppHaptics.success();
+      _enterApp();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isOnboarding = false);
+    }
+  }
+
+  void _enterApp() {
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -167,6 +289,10 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                         ),
                         _AddressStep(
                           accentColor: _locationAccent,
+                          cities: _cities,
+                          selectedCityId: _selectedCityId,
+                          onCitySelected: (id) =>
+                              setState(() => _selectedCityId = id),
                           onBack: _back,
                           onConfirm: _next,
                         ),
@@ -186,7 +312,11 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                     padding: EdgeInsets.only(
                       bottom: keyboardInset + 14 + bottomInset * 0.3,
                     ),
-                    child: _NextButton(label: _buttonLabel, onTap: _next),
+                      child: _NextButton(
+                        label: _buttonLabel,
+                        isLoading: _isVerifying || _isOnboarding,
+                        onTap: _next,
+                      ),
                   ),
                 ),
             ],
@@ -526,11 +656,17 @@ class _LargeTextField extends StatelessWidget {
 class _AddressStep extends StatefulWidget {
   const _AddressStep({
     required this.accentColor,
+    required this.cities,
+    required this.selectedCityId,
+    required this.onCitySelected,
     required this.onBack,
     required this.onConfirm,
   });
 
   final Color accentColor;
+  final List<City> cities;
+  final String? selectedCityId;
+  final ValueChanged<String> onCitySelected;
   final VoidCallback onBack;
   final VoidCallback onConfirm;
 
@@ -629,6 +765,9 @@ class _AddressStepState extends State<_AddressStep>
           child: _ConfirmLocationSheet(
             accentColor: widget.accentColor,
             bottomInset: bottomInset,
+            cities: widget.cities,
+            selectedCityId: widget.selectedCityId,
+            onCitySelected: widget.onCitySelected,
             onConfirm: widget.onConfirm,
           ),
         ),
@@ -752,11 +891,17 @@ class _ConfirmLocationSheet extends StatelessWidget {
   const _ConfirmLocationSheet({
     required this.accentColor,
     required this.bottomInset,
+    required this.cities,
+    required this.selectedCityId,
+    required this.onCitySelected,
     required this.onConfirm,
   });
 
   final Color accentColor;
   final double bottomInset;
+  final List<City> cities;
+  final String? selectedCityId;
+  final ValueChanged<String> onCitySelected;
   final VoidCallback onConfirm;
 
   @override
@@ -831,6 +976,35 @@ class _ConfirmLocationSheet extends StatelessWidget {
                     height: 1.35,
                   ),
                 ),
+                if (cities.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'City',
+                    style: TextStyle(
+                      color: Color(0xFF262626),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final city in cities)
+                        ChoiceChip(
+                          label: Text(
+                            city.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          selected: city.id == selectedCityId,
+                          onSelected: (_) => onCitySelected(city.id),
+                          showCheckmark: false,
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 17),
                 SizedBox(
                   width: double.infinity,
@@ -1157,10 +1331,11 @@ class _CalloutPointerClipper extends CustomClipper<Path> {
 }
 
 class _NextButton extends StatefulWidget {
-  const _NextButton({required this.label, required this.onTap});
+  const _NextButton({required this.label, required this.onTap, this.isLoading = false});
 
   final String label;
   final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   State<_NextButton> createState() => _NextButtonState();
@@ -1172,7 +1347,7 @@ class _NextButtonState extends State<_NextButton> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: widget.isLoading ? null : widget.onTap,
       onTapDown: (_) => setState(() => _scale = 0.97),
       onTapUp: (_) => setState(() => _scale = 1),
       onTapCancel: () => setState(() => _scale = 1),
@@ -1196,15 +1371,25 @@ class _NextButtonState extends State<_NextButton> {
           alignment: Alignment.center,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
-            child: Text(
-              widget.label,
-              key: ValueKey(widget.label),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            child: widget.isLoading
+                ? const SizedBox(
+                    key: ValueKey('loading'),
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    widget.label,
+                    key: ValueKey(widget.label),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
           ),
         ),
       ),

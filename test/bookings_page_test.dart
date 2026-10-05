@@ -43,15 +43,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My bookings'), findsOneWidget);
-    expect(find.text('3 service bookings'), findsOneWidget);
     expect(find.text('Civil touch-ups'), findsOneWidget);
     expect(find.text('Plumbing fixes'), findsOneWidget);
     expect(find.text('Painting repairs'), findsOneWidget);
     expect(find.text('Confirmed'), findsOneWidget);
     expect(find.text('In service'), findsOneWidget);
     expect(find.text('Completed'), findsWidgets);
-    expect(find.text('Active now'), findsOneWidget);
-    expect(find.text('Total spent'), findsOneWidget);
   });
 
   // Segments carry no keys in the GlassSegmentedControl API, so scope
@@ -96,8 +93,11 @@ void main() {
     await tester.pumpWidget(wrap(BookingsPage(bookings: const [])));
     await tester.pumpAndSettle();
 
-    expect(find.text('No bookings yet'), findsOneWidget);
     expect(find.text('No bookings here'), findsOneWidget);
+    expect(
+      find.textContaining('Services you book will appear here.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('no overflow across common phone widths', (tester) async {

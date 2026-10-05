@@ -4,26 +4,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/models/api/api_booking.dart';
 import '../../../../core/models/booking.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/booking_service.dart';
 import '../../../../core/utils/app_haptics.dart';
+
+const _pinkBg = Color(0xFFF9ECEC);
+const _sealRed = Color(0xFFCE2E30);
+const _ink = Color(0xFF212121);
+const _pink = Color(0xFFEC407A);
+const _pinkSoft = Color(0xFFFCE7F1);
+const _greyText = Color(0xFF8A8A8A);
 
 /// Booking detail, matching the payment-failed reference screen exactly:
 /// pink header zone with back button, red scalloped seal + title, and a
 /// white sheet with the refund note, slot/address card and action rows.
-class BookingDetailPage extends StatelessWidget {
-  const BookingDetailPage({super.key, required this.booking});
+class BookingDetailPage extends StatefulWidget {
+  const BookingDetailPage({super.key, required this.booking, this.onChanged});
 
   final Booking booking;
 
-  static const _pinkBg = Color(0xFFF9ECEC);
-  static const _sealRed = Color(0xFFCE2E30);
-  static const _ink = Color(0xFF212121);
-  static const _pink = Color(0xFFEC407A);
-  static const _pinkSoft = Color(0xFFFCE7F1);
-  static const _greyText = Color(0xFF8A8A8A);
+  /// Called after a status transition succeeds, so the
+  /// bookings list behind this page reloads.
+  final VoidCallback? onChanged;
+
+  @override
+  State<BookingDetailPage> createState() => _BookingDetailPageState();
+}
+
+class _BookingDetailPageState extends State<BookingDetailPage> {
+  bool _isBusy = false;
 
   @override
   Widget build(BuildContext context) {
+    final booking = widget.booking;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       backgroundColor: _pinkBg,
@@ -198,6 +213,36 @@ class BookingDetailPage extends StatelessWidget {
                       _DetailCard(
                         child: Column(
                           children: [
+                            if (booking.status.isActive) ...[
+                              _ActionRow(
+                                icon: LucideIcons.circleCheck,
+                                title: 'Mark as completed',
+                                subtitle: 'Confirm the service was delivered',
+                                onTap: _isBusy
+                                    ? null
+                                    : () => _transitionStatus(
+                                          ApiBookingStatus.completed,
+                                        ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(height: 1),
+                              ),
+                              _ActionRow(
+                                icon: LucideIcons.xCircle,
+                                title: 'Cancel booking',
+                                subtitle: 'Cancel this booking',
+                                onTap: _isBusy
+                                    ? null
+                                    : () => _transitionStatus(
+                                          ApiBookingStatus.cancelled,
+                                        ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(height: 1),
+                              ),
+                            ],
                             _ActionRow(
                               icon: LucideIcons.indianRupee,
                               title: 'Payment Details',
@@ -234,6 +279,44 @@ class BookingDetailPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// `PATCH /bookings/{id}/status` — transitions the
+  /// booking on the backend, then refreshes the list
+  /// behind this page.
+  Future<void> _transitionStatus(ApiBookingStatus status) async {
+    final id = widget.booking.id;
+    if (id.isEmpty) {
+      AppHaptics.press();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo booking — no server copy to update.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isBusy = true);
+    try {
+      await BookingService.instance.updateStatus(id, status);
+      AppHaptics.success();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Booking ${status.value.toLowerCase()}.'),
+        ),
+      );
+      widget.onChanged?.call();
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   void _showPriceSummary(BuildContext context, Booking booking) {
@@ -345,25 +428,27 @@ class _ActionRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.onTap,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        AppHaptics.press();
-        onTap();
-      },
+      onTap: onTap == null
+          ? null
+          : () {
+              AppHaptics.press();
+              onTap!();
+            },
       borderRadius: BorderRadius.circular(12),
       child: Row(
         children: [
-          Icon(icon, color: BookingDetailPage._pink, size: 22),
+          Icon(icon, color: _pink, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -372,7 +457,7 @@ class _ActionRow extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: BookingDetailPage._ink,
+                    color: _ink,
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.2,
@@ -383,7 +468,7 @@ class _ActionRow extends StatelessWidget {
                 Text(
                   subtitle,
                   style: const TextStyle(
-                    color: BookingDetailPage._greyText,
+                    color: _greyText,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.none,
@@ -394,7 +479,7 @@ class _ActionRow extends StatelessWidget {
           ),
           const Icon(
             LucideIcons.chevronRight,
-            color: BookingDetailPage._greyText,
+            color: _greyText,
             size: 20,
           ),
         ],
@@ -429,7 +514,7 @@ class _SealPainter extends CustomPainter {
     path.close();
     canvas.drawPath(
       path,
-      Paint()..color = BookingDetailPage._sealRed,
+      Paint()..color = _sealRed,
     );
 
     final arm = base * 0.24;

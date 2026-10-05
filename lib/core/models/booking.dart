@@ -30,6 +30,7 @@ enum BookingMode {
 
 class Booking {
   const Booking({
+    this.id = '',
     required this.service,
     required this.mode,
     required this.slot,
@@ -38,6 +39,9 @@ class Booking {
     this.status = BookingStatus.confirmed,
   });
 
+  /// Backend booking id (`POST /bookings` response). Empty for
+  /// locally-created demo bookings.
+  final String id;
   final ServiceItem service;
   final String mode;
   final String slot;

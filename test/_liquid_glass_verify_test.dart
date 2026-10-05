@@ -24,7 +24,7 @@ void main() {
       matching: find.byIcon(icon),
     );
 
-    await tester.tap(barIcon(Icons.receipt_long_outlined));
+    await tester.tap(barIcon(Icons.confirmation_number_outlined));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('My bookings'), findsOneWidget);
 

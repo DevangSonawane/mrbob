@@ -3,12 +3,63 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'email_login_page.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/auth_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _phoneController = TextEditingController();
+  bool _isRequestingOtp = false;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  /// `POST /auth/otp/request` — ask the backend for a login OTP,
+  /// then hand the phone to the OTP step. In dev the OTP is
+  /// logged server-side rather than sent over SMS.
+  Future<void> _openPhoneLogin() async {
+    final phone = _phoneController.text.trim();
+    if (phone.length != 10) {
+      AppHaptics.press();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a 10-digit mobile number')),
+      );
+      return;
+    }
+
+    setState(() => _isRequestingOtp = true);
+    try {
+      await AuthService.instance.requestOtp('+91$phone');
+      AppHaptics.confirm();
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmailLoginPage(phone: '+91$phone'),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isRequestingOtp = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +113,9 @@ class LoginPage extends StatelessWidget {
                 alignment: Alignment.bottomCenter,
                 child: _LoginSheet(
                   bottomInset: bottomInset,
-                  onContinue: () => _openPhoneLogin(context),
+                  phoneController: _phoneController,
+                  isLoading: _isRequestingOtp,
+                  onContinue: _openPhoneLogin,
                   onGoogle: () => _enterApp(context),
                   onApple: () => _enterApp(context),
                 ),
@@ -74,14 +127,8 @@ class LoginPage extends StatelessWidget {
     );
   }
 
-  void _openPhoneLogin(BuildContext context) {
-    AppHaptics.press();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const EmailLoginPage()),
-    );
-  }
-
+  // The backend has no social-login endpoints, so Google/Apple
+  // stay demo shortcuts into the shell (unauthenticated demo).
   static void _enterApp(BuildContext context) {
     AppHaptics.confirm();
     Navigator.pushReplacement(
@@ -97,12 +144,16 @@ class LoginPage extends StatelessWidget {
 class _LoginSheet extends StatelessWidget {
   const _LoginSheet({
     required this.bottomInset,
+    required this.phoneController,
+    required this.isLoading,
     required this.onContinue,
     required this.onGoogle,
     required this.onApple,
   });
 
   final double bottomInset;
+  final TextEditingController phoneController;
+  final bool isLoading;
   final VoidCallback onContinue;
   final VoidCallback onGoogle;
   final VoidCallback onApple;
@@ -153,6 +204,7 @@ class _LoginSheet extends StatelessWidget {
                       Expanded(
                         child: _PhoneNumberField(
                           compact: compact,
+                          controller: phoneController,
                           onSubmitted: onContinue,
                         ),
                       ),
@@ -164,7 +216,7 @@ class _LoginSheet extends StatelessWidget {
               SizedBox(
                 height: 43,
                 child: FilledButton(
-                  onPressed: onContinue,
+                  onPressed: isLoading ? null : onContinue,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.brandForest,
                     foregroundColor: Colors.white,
@@ -173,10 +225,19 @@ class _LoginSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Continue',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                        ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -281,9 +342,14 @@ class _IndiaFlag extends StatelessWidget {
 }
 
 class _PhoneNumberField extends StatelessWidget {
-  const _PhoneNumberField({required this.compact, required this.onSubmitted});
+  const _PhoneNumberField({
+    required this.compact,
+    required this.controller,
+    required this.onSubmitted,
+  });
 
   final bool compact;
+  final TextEditingController controller;
   final VoidCallback onSubmitted;
 
   @override
@@ -309,6 +375,7 @@ class _PhoneNumberField extends StatelessWidget {
           SizedBox(width: compact ? 6 : 9),
           Expanded(
             child: TextField(
+              controller: controller,
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.done,
               inputFormatters: <TextInputFormatter>[

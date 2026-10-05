@@ -2,26 +2,77 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/api/app_user.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../shared/widgets/simple_page.dart';
 import '../../../../shared/widgets/support_tile.dart';
+import '../../../amc/presentation/pages/amc_page.dart';
+import '../../../auth/presentation/pages/login_page.dart';
 import '../../../refer/presentation/pages/refer_page.dart';
+import '../../../reviews/presentation/pages/reviews_page.dart';
 import '../../../wallet/presentation/pages/wallet_page.dart';
 import '../widgets/coupon_card.dart';
 
 /// Account page in the Trumarkz org-profile-settings language:
 /// title header, centered avatar + name, 2-column action cards and a
 /// grouped "Manage Account" card — with MrBob content and brand accents.
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
-  static const double _referenceWidth = 402;
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  /// User cached from the API session (`GET /auth/me`
+  /// at login time). Falls back to the demo name when
+  /// the app was entered via a demo shortcut.
+  AppUser? get _user => TokenStore.instance.user;
+
+  String get _displayName {
+    final name = _user?.name ?? '';
+    return name.isEmpty ? 'Aarav Mehta' : name;
+  }
 
   void _openManageAccount(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ManageAccountPage()),
+    );
+  }
+
+  /// `POST /auth/*` has no server-side logout, so
+  /// sign-out clears the persisted session locally.
+  Future<void> _signOut() async {
+    AppHaptics.confirm();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'You\'ll need your phone OTP to sign back in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Stay'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await AuthService.instance.signOut();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
     );
   }
 
@@ -82,7 +133,7 @@ class ProfilePage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _ProfileHeader(
-                              displayName: 'Aarav Mehta',
+                              displayName: _displayName,
                               onEdit: () => _openManageAccount(context),
                               onStatusTap: () =>
                                   _showAccountStatusPopup(context),
@@ -102,6 +153,18 @@ class ProfilePage extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => const WalletPage(),
+                                ),
+                              ),
+                              onAmc: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AmcPage(),
+                                ),
+                              ),
+                              onReviews: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ReviewsPage(),
                                 ),
                               ),
                               onOffers: () => Navigator.push(
@@ -132,6 +195,7 @@ class ProfilePage extends StatelessWidget {
                                 ),
                               ),
                               onSettings: () => _openManageAccount(context),
+                              onSignOut: _signOut,
                             ),
                             SizedBox(height: s(36)),
                           ],
@@ -147,6 +211,8 @@ class ProfilePage extends StatelessWidget {
       ),
     );
   }
+
+  static const double _referenceWidth = 402;
 }
 
 void _showAccountStatusPopup(BuildContext context) {
@@ -346,12 +412,16 @@ class _AccountActionGrid extends StatelessWidget {
   const _AccountActionGrid({
     required this.onBookings,
     required this.onWallet,
+    required this.onAmc,
+    required this.onReviews,
     required this.onOffers,
     required this.onRefer,
   });
 
   final VoidCallback onBookings;
   final VoidCallback onWallet;
+  final VoidCallback onAmc;
+  final VoidCallback onReviews;
   final VoidCallback onOffers;
   final VoidCallback onRefer;
 
@@ -377,6 +447,18 @@ class _AccountActionGrid extends StatelessWidget {
           title: 'My wallet',
           subtitle: 'Check balance',
           onTap: onWallet,
+        ),
+        _AccountActionCard(
+          icon: Icons.shield_rounded,
+          title: 'AMC plans',
+          subtitle: 'Maintenance cover',
+          onTap: onAmc,
+        ),
+        _AccountActionCard(
+          icon: Icons.star_rounded,
+          title: 'Rate services',
+          subtitle: 'Share feedback',
+          onTap: onReviews,
         ),
         _AccountActionCard(
           icon: Icons.local_offer_rounded,
@@ -501,11 +583,13 @@ class _ManageAccountSection extends StatelessWidget {
     required this.onHelp,
     required this.onAddress,
     required this.onSettings,
+    required this.onSignOut,
   });
 
   final VoidCallback onHelp;
   final VoidCallback onAddress;
   final VoidCallback onSettings;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -527,6 +611,11 @@ class _ManageAccountSection extends StatelessWidget {
         title: 'Account settings',
         icon: Icons.manage_accounts_rounded,
         onTap: onSettings,
+      ),
+      _ManageRowData(
+        title: 'Sign out',
+        icon: Icons.logout_rounded,
+        onTap: onSignOut,
       ),
     ];
 
