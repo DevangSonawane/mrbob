@@ -2226,78 +2226,53 @@ class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
     final e = t * t * (3 - 2 * t);
     return Container(
       color: _homeHeaderColor,
-      child: Column(
-        mainAxisSize: MainAxisSize.max,
+      child: Stack(
         children: [
-          // Location row (pin + address + bell + profile) collapses away.
-          // OverflowBox lets the fixed 64px content exceed the shrinking
-          // box without asserting; ClipRect clips the paint.
-          ClipRect(
-            child: SizedBox(
-              height: _locationHeight * (1 - t),
-              child: OverflowBox(
-                minHeight: 0,
-                maxHeight: _locationHeight,
-                alignment: Alignment.topCenter,
+          Column(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              // Location row (address text + actions) collapses away, but the
+              // map pin itself is drawn once in the overlay below and remains
+              // the fixed anchor for the search animation.
+              ClipRect(
                 child: SizedBox(
-                  height: _locationHeight,
-                  child: Opacity(
-                    opacity: (1 - e * 1.4).clamp(0.0, 1.0),
-                    child: Transform.translate(
-                      offset: Offset(0, -28 * e),
-                      child: Container(
-                        color: _homeHeaderColor,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: horizontalInset,
-                          vertical: 10,
-                        ),
-                        child: _LocationBar(scale: scale),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Search row: pin icon fades in on the left while the shared
-          // search box glides up beside it — the diagonal move. Icon-only
-          // (no text) so the search keeps plenty of width when collapsed.
-          Container(
-            height: _searchHeight,
-            color: _homeHeaderColor,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                ClipRect(
-                  // 48 fits the left inset + 22px pin at any screen width.
-                  child: SizedBox(
-                    width: 48 * e,
-                    child: Opacity(
-                      opacity: e.clamp(0.0, 1.0),
-                      child: Padding(
-                        padding: EdgeInsets.only(left: horizontalInset),
-                        child: const SizedBox(
-                          height: 52,
-                          child: Icon(
-                            LucideIcons.mapPin,
-                            color: Colors.white,
-                            size: 22,
+                  height: _locationHeight * (1 - t),
+                  child: OverflowBox(
+                    minHeight: 0,
+                    maxHeight: _locationHeight,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      height: _locationHeight,
+                      child: Opacity(
+                        opacity: (1 - e * 1.4).clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, -28 * e),
+                          child: Container(
+                            color: _homeHeaderColor,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: horizontalInset,
+                              vertical: 10,
+                            ),
+                            child: _LocationBar(scale: scale, showPin: false),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                SizedBox(width: 6 * e),
-                Expanded(
-                  child: Padding(
-                    // Left inset melts away as the mini location takes it.
-                    padding: EdgeInsets.only(
-                      left: horizontalInset * (1 - e),
-                      right: horizontalInset,
-                    ),
-                    // The mode menu owns view filtering; the typed query is
-                    // still a no-op for a future grid filter.
+              ),
+              // Search row glides diagonally into the fixed map-pin anchor.
+              Container(
+                height: _searchHeight,
+                color: _homeHeaderColor,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: horizontalInset + (48 * e),
+                    right: horizontalInset,
+                  ),
+                  child: Transform.translate(
+                    offset: Offset(0, -6 * e),
                     child: _SearchBar(
                       onChanged: (_) {},
                       modeFilter: modeFilter,
@@ -2305,7 +2280,30 @@ class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
                     ),
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          Positioned(
+            left: horizontalInset,
+            top: (_searchHeight - 38 * scale) / 2,
+            child: SizedBox(
+              width: 38 * scale,
+              height: 38 * scale,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _homeHeaderColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  LucideIcons.mapPin,
+                  color: Colors.white,
+                  size: 20 * scale,
+                ),
+              ),
             ),
           ),
         ],
@@ -2488,9 +2486,10 @@ class _SearchBarState extends State<_SearchBar> {
 
 /// Blinkit-style location row: pin + address left, actions right.
 class _LocationBar extends StatelessWidget {
-  const _LocationBar({required this.scale});
+  const _LocationBar({required this.scale, this.showPin = true});
 
   final double scale;
+  final bool showPin;
 
   @override
   Widget build(BuildContext context) {
@@ -2499,21 +2498,24 @@ class _LocationBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 38 * scale,
-            height: 38 * scale,
-            decoration: BoxDecoration(
-              color: _homeHeaderColor,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.18),
-                width: 1,
+          Opacity(
+            opacity: showPin ? 1 : 0,
+            child: Container(
+              width: 38 * scale,
+              height: 38 * scale,
+              decoration: BoxDecoration(
+                color: _homeHeaderColor,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  width: 1,
+                ),
               ),
-            ),
-            child: Icon(
-              LucideIcons.mapPin,
-              color: Colors.white,
-              size: 20 * scale,
+              child: Icon(
+                LucideIcons.mapPin,
+                color: Colors.white,
+                size: 20 * scale,
+              ),
             ),
           ),
           SizedBox(width: 10 * scale),
