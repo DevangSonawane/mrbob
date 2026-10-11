@@ -16,22 +16,17 @@ class AuthService {
 
   final _api = ApiClient.instance;
 
-  /// `POST /auth/otp/request` — request a login OTP for a phone
-  /// number. In dev the OTP is logged server-side rather than
-  /// sent over SMS.
+  /// `POST /customer-onboarding/otp/request` — request a
+  /// customer-login OTP for a phone number.
   Future<void> requestOtp(String phone) async {
-    await _api.post('/auth/otp/request', body: {'phone': phone});
+    await _api.post('/customer-onboarding/otp/request', body: {'phone': phone});
   }
 
-  /// `POST /auth/otp/verify` — verify the OTP and log in.
-  /// Creates the user on first login.
-  Future<AuthSession> verifyOtp(
-    String phone,
-    String op, {
-    String? name,
-  }) async {
+  /// `POST /customer-onboarding/otp/verify` — verify the OTP
+  /// and sign the customer in. Creates the customer on first use.
+  Future<AuthSession> verifyOtp(String phone, String op, {String? name}) async {
     final data = await _api.post(
-      '/auth/otp/verify',
+      '/customer-onboarding/otp/verify',
       body: {
         'phone': phone,
         'otp': op,
@@ -62,8 +57,7 @@ class AuthService {
         'name': name.trim(),
         'email': email.trim(),
         'password': password,
-        if (phone != null && phone.trim().isNotEmpty)
-          'phone': phone.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
       },
     );
     final session = _sessionFrom(data);

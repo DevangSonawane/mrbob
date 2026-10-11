@@ -27,7 +27,7 @@ class BookingDetailPage extends StatefulWidget {
 
   /// Called after a status transition succeeds, so the
   /// bookings list behind this page reloads.
-  final VoidCallback? onChanged;
+  final Future<void> Function()? onChanged;
 
   @override
   State<BookingDetailPage> createState() => _BookingDetailPageState();
@@ -93,12 +93,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     ),
                   ),
                   child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      10,
-                      20,
-                      24 + bottomInset,
-                    ),
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 24 + bottomInset),
                     children: [
                       Center(
                         child: Container(
@@ -221,8 +216,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                                 onTap: _isBusy
                                     ? null
                                     : () => _transitionStatus(
-                                          ApiBookingStatus.completed,
-                                        ),
+                                        ApiBookingStatus.completed,
+                                      ),
                               ),
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 12),
@@ -235,8 +230,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                                 onTap: _isBusy
                                     ? null
                                     : () => _transitionStatus(
-                                          ApiBookingStatus.cancelled,
-                                        ),
+                                        ApiBookingStatus.cancelled,
+                                      ),
                               ),
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 12),
@@ -247,8 +242,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                               icon: LucideIcons.indianRupee,
                               title: 'Payment Details',
                               subtitle: 'View detailed price summary',
-                              onTap: () =>
-                                  _showPriceSummary(context, booking),
+                              onTap: () => _showPriceSummary(context, booking),
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
@@ -258,8 +252,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                               icon: LucideIcons.headset,
                               title: 'Contact Support',
                               subtitle: 'Get quick help for your queries',
-                              onTap: () => ScaffoldMessenger.of(context)
-                                  .showSnackBar(
+                              onTap: () =>
+                                  ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text(
                                         'Connecting you to support…',
@@ -303,17 +297,16 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       AppHaptics.success();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Booking ${status.value.toLowerCase()}.'),
-        ),
+        SnackBar(content: Text('Booking ${status.value.toLowerCase()}.')),
       );
-      widget.onChanged?.call();
+      await widget.onChanged?.call();
+      if (!mounted) return;
       Navigator.of(context).pop();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -415,10 +408,7 @@ class _DetailCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
-      ),
+      child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
   }
 }
@@ -477,11 +467,7 @@ class _ActionRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(
-            LucideIcons.chevronRight,
-            color: _greyText,
-            size: 20,
-          ),
+          const Icon(LucideIcons.chevronRight, color: _greyText, size: 20),
         ],
       ),
     );
@@ -512,10 +498,7 @@ class _SealPainter extends CustomPainter {
       }
     }
     path.close();
-    canvas.drawPath(
-      path,
-      Paint()..color = _sealRed,
-    );
+    canvas.drawPath(path, Paint()..color = _sealRed);
 
     final arm = base * 0.24;
     final xPaint = Paint()

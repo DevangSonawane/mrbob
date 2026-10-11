@@ -41,13 +41,13 @@ Booking mapApiBooking(ApiBooking api) {
 
 BookingStatus _mapStatus(ApiBookingStatus status) {
   return switch (status) {
+    ApiBookingStatus.awaitingPayment => BookingStatus.confirmed,
     ApiBookingStatus.completed => BookingStatus.completed,
     ApiBookingStatus.cancelled => BookingStatus.cancelled,
     ApiBookingStatus.pending ||
     ApiBookingStatus.matching ||
     ApiBookingStatus.assigned ||
-    ApiBookingStatus.inProgress =>
-      BookingStatus.inService,
+    ApiBookingStatus.inProgress => BookingStatus.inService,
   };
 }
 
@@ -57,11 +57,12 @@ String _formatSlot(DateTime dt) {
   final isToday =
       dt.year == now.year && dt.month == now.month && dt.day == now.day;
   final isTomorrow =
-      dt.year == now.year &&
-      dt.month == now.month &&
-      dt.day == now.day + 1;
-  final dayLabel =
-      isToday ? 'Today' : isTomorrow ? 'Tomorrow' : '${dt.day}/${dt.month}';
+      dt.year == now.year && dt.month == now.month && dt.day == now.day + 1;
+  final dayLabel = isToday
+      ? 'Today'
+      : isTomorrow
+      ? 'Tomorrow'
+      : '${dt.day}/${dt.month}';
   final hour = dt.hour;
   final period = hour >= 12 ? 'PM' : 'AM';
   final h12 = hour % 12 == 0 ? 12 : hour % 12;

@@ -1,5 +1,5 @@
-/// Customer/user account as returned by `/auth/me`, `/auth/*`
-/// and `/onboarding/*`.
+/// Customer/user account as returned by auth, profile and
+/// customer-onboarding endpoints.
 ///
 /// The backend wraps every response in `{success, data}`; the
 /// user object itself uses `id` (or `_id`) plus an `isOnboarded`
@@ -41,15 +41,15 @@ class AppUser {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'role': role,
-        'isOnboarded': isOnboarded,
-        'cityId': cityId,
-        'address': address,
-      };
+    'id': id,
+    'name': name,
+    'email': email,
+    'phone': phone,
+    'role': role,
+    'isOnboarded': isOnboarded,
+    'cityId': cityId,
+    'address': address,
+  };
 }
 
 /// Auth response: `{ user, accessToken, refreshToken }`.
@@ -85,8 +85,7 @@ class AuthSession {
     return AuthSession(
       user: user,
       accessToken: pickToken(['accessToken', 'access_token', 'token']),
-      refreshToken:
-          pickToken(['refreshToken', 'refresh_token', 'refresh']),
+      refreshToken: pickToken(['refreshToken', 'refresh_token', 'refresh']),
     );
   }
 }

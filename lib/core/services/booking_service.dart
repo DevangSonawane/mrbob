@@ -16,27 +16,40 @@ class BookingService {
 
   /// `POST /bookings` — create a booking (status PENDING).
   ///
-  /// [categoryId] must reference an active category
-  /// (`GET /categories`); [address] is the service address.
-  /// [scheduledAt] is optional — omit for instant bookings.
+  /// [categoryId] must reference an active category from
+  /// `GET /categories`. [scheduledAt], [description] and
+  /// [paymentMode] are required by the current booking API.
   Future<ApiBooking> create({
     required String categoryId,
-    required String address,
-    DateTime? scheduledAt,
+    required DateTime scheduledAt,
+    required String description,
+    required String paymentMode,
+    String? addressId,
   }) async {
     final data = await _api.post(
       '/bookings',
       body: {
         'categoryId': categoryId,
-        'address': address,
-        if (scheduledAt != null)
-          'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+        'scheduledAt': _toIsoDateTimeWithOffset(scheduledAt),
+        'description': description,
+        'paymentMode': paymentMode,
+        if (addressId != null && addressId.isNotEmpty) 'addressId': addressId,
       },
     );
     if (data is! Map<String, dynamic>) {
       throw const ApiException('Unexpected booking response');
     }
     return ApiBooking.fromJson(data);
+  }
+
+  String _toIsoDateTimeWithOffset(DateTime value) {
+    final local = value.toLocal();
+    final offset = local.timeZoneOffset;
+    final sign = offset.isNegative ? '-' : '+';
+    final absoluteOffset = offset.abs();
+    final hours = absoluteOffset.inHours.toString().padLeft(2, '0');
+    final minutes = (absoluteOffset.inMinutes % 60).toString().padLeft(2, '0');
+    return '${local.toIso8601String()}$sign$hours:$minutes';
   }
 
   /// `GET /bookings` — bookings visible to the current user.
@@ -58,10 +71,7 @@ class BookingService {
   /// `PATCH /bookings/{id}/status` — transition a booking's
   /// status. Customers typically cancel (CANCELLED); completion
   /// is normally driven by the professional.
-  Future<ApiBooking> updateStatus(
-    String id,
-    ApiBookingStatus status,
-  ) async {
+  Future<ApiBooking> updateStatus(String id, ApiBookingStatus status) async {
     final data = await _api.patch(
       '/bookings/$id/status',
       body: {'status': status.value},

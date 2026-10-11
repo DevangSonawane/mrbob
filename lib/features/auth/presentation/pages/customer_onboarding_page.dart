@@ -9,24 +9,18 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
-/// Completes customer onboarding (`POST /onboarding/customer`)
-/// after email signup. Only the city is required by the
-/// backend; name, phone and address are optional profile
-/// details.
+/// Completes customer onboarding after email signup. The
+/// backend saves profile details first, then the default
+/// address.
 class CustomerOnboardingPage extends StatefulWidget {
-  const CustomerOnboardingPage({
-    super.key,
-    this.name = '',
-    this.phone,
-  });
+  const CustomerOnboardingPage({super.key, this.name = '', this.phone});
 
   /// Pre-filled from the signup form when available.
   final String name;
   final String? phone;
 
   @override
-  State<CustomerOnboardingPage> createState() =>
-      _CustomerOnboardingPageState();
+  State<CustomerOnboardingPage> createState() => _CustomerOnboardingPageState();
 }
 
 class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
@@ -46,6 +40,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
     if (widget.phone != null) {
       _phoneController.text = widget.phone!;
     }
+    _addressController.text = OnboardingService.defaultClientAddress;
     _loadCities();
   }
 
@@ -89,7 +84,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
         cityId: cityId,
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
-        address: _addressController.text.trim(),
+        address: OnboardingService.defaultClientAddress,
       );
       AppHaptics.success();
       if (!mounted) return;
@@ -102,9 +97,9 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -248,46 +243,45 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
                                 ),
                               )
                             : _cities.isEmpty
-                                ? const SizedBox(
-                                    height: 52,
-                                    child: Center(
-                                      child: Text(
-                                        'No service cities available yet',
-                                        style: TextStyle(
-                                          color: AppColors.mutedText,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+                            ? const SizedBox(
+                                height: 52,
+                                child: Center(
+                                  child: Text(
+                                    'No service cities available yet',
+                                    style: TextStyle(
+                                      color: AppColors.mutedText,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                  )
-                                : Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      for (final city in _cities)
-                                        ChoiceChip(
-                                          label: Text(
-                                            city.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          selected:
-                                              city.id == _selectedCityId,
-                                          onSelected: (_) => setState(
-                                            () =>
-                                                _selectedCityId = city.id,
-                                          ),
-                                          showCheckmark: false,
-                                        ),
-                                    ],
                                   ),
+                                ),
+                              )
+                            : Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final city in _cities)
+                                    ChoiceChip(
+                                      label: Text(
+                                        city.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      selected: city.id == _selectedCityId,
+                                      onSelected: (_) => setState(
+                                        () => _selectedCityId = city.id,
+                                      ),
+                                      showCheckmark: false,
+                                    ),
+                                ],
+                              ),
                       ),
                       const SizedBox(height: 16),
                       _LabeledField(
                         label: 'Service address (optional)',
                         child: TextField(
                           controller: _addressController,
+                          readOnly: true,
                           textCapitalization: TextCapitalization.words,
                           maxLines: 2,
                           style: const TextStyle(
@@ -297,10 +291,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
                           ),
                           decoration: const InputDecoration(
                             hintText: 'Flat, street, landmark',
-                            prefixIcon: Icon(
-                              Icons.home_rounded,
-                              size: 20,
-                            ),
+                            prefixIcon: Icon(Icons.home_rounded, size: 20),
                           ),
                         ),
                       ),
@@ -309,12 +300,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  8,
-                  20,
-                  12 + bottomInset,
-                ),
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + bottomInset),
                 child: SizedBox(
                   height: 58,
                   width: double.infinity,

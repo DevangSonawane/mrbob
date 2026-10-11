@@ -12,16 +12,18 @@ class BookingsPage extends StatefulWidget {
   const BookingsPage({
     super.key,
     required this.bookings,
+    this.isLoading = false,
     this.onBrowse,
     this.onChanged,
   });
 
   final List<Booking> bookings;
+  final bool isLoading;
   final VoidCallback? onBrowse;
 
-  /// Reloads the bookings list after a detail-page
-  /// status transition.
-  final VoidCallback? onChanged;
+  /// Reloads the bookings list after pull-to-refresh
+  /// or a detail-page status transition.
+  final Future<void> Function()? onChanged;
 
   @override
   State<BookingsPage> createState() => _BookingsPageState();
@@ -44,6 +46,11 @@ class _BookingsPageState extends State<BookingsPage> {
     };
   }
 
+  Future<void> _refreshBookings() async {
+    AppHaptics.press();
+    await widget.onChanged?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
@@ -52,44 +59,71 @@ class _BookingsPageState extends State<BookingsPage> {
       backgroundColor: Colors.white,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
-          children: [
-            const _Header(),
-            const SizedBox(height: 18),
-            _GlassFilterBar(
-              filters: _filters,
-              selectedIndex: _filterIndex,
-              onSelected: (index) => setState(() => _filterIndex = index),
-            ),
-            const SizedBox(height: 20),
-            if (filtered.isEmpty)
-              _EmptyState(onBrowse: widget.onBrowse)
-            else
-              Column(
-                children: [
-                  for (final booking in filtered) ...[
-                    GestureDetector(
-                      onTap: () {
-                        AppHaptics.press();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                BookingDetailPage(
-                                  booking: booking,
-                                  onChanged: widget.onChanged,
-                                ),
-                          ),
-                        );
-                      },
-                      child: BookingCard(booking: booking),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ],
+        child: RefreshIndicator(
+          color: AppColors.brandForest,
+          onRefresh: _refreshBookings,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+            children: [
+              const _Header(),
+              const SizedBox(height: 18),
+              _GlassFilterBar(
+                filters: _filters,
+                selectedIndex: _filterIndex,
+                onSelected: (index) => setState(() => _filterIndex = index),
               ),
-          ],
+              const SizedBox(height: 20),
+              if (widget.isLoading)
+                const _BookingsLoadingState()
+              else if (filtered.isEmpty)
+                _EmptyState(onBrowse: widget.onBrowse)
+              else
+                Column(
+                  children: [
+                    for (final booking in filtered) ...[
+                      GestureDetector(
+                        onTap: () {
+                          AppHaptics.press();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BookingDetailPage(
+                                booking: booking,
+                                onChanged: widget.onChanged,
+                              ),
+                            ),
+                          );
+                        },
+                        child: BookingCard(booking: booking),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingsLoadingState extends StatelessWidget {
+  const _BookingsLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 56),
+      child: Center(
+        child: SizedBox(
+          height: 26,
+          width: 26,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.6,
+            color: AppColors.brandForest,
+          ),
         ),
       ),
     );

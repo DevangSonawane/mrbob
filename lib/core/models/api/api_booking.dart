@@ -8,6 +8,7 @@ import 'service_category.dart';
 /// may transition a booking through MATCHING → ASSIGNED →
 /// IN_PROGRESS → COMPLETED, or CANCELLED.
 enum ApiBookingStatus {
+  awaitingPayment('AWAITING_PAYMENT'),
   pending('PENDING'),
   matching('MATCHING'),
   assigned('ASSIGNED'),
@@ -62,6 +63,7 @@ class ApiBooking {
   final Map<String, dynamic> raw;
 
   bool get isActive =>
+      status == ApiBookingStatus.awaitingPayment ||
       status == ApiBookingStatus.pending ||
       status == ApiBookingStatus.matching ||
       status == ApiBookingStatus.assigned ||
@@ -71,24 +73,35 @@ class ApiBooking {
 
   factory ApiBooking.fromJson(Map<String, dynamic> json) {
     ServiceCategory? category;
-    final categoryJson = json['category'];
+    final categoryJson = json['category'] ?? json['service'];
     if (categoryJson is Map<String, dynamic>) {
       category = ServiceCategory.fromJson(categoryJson);
     }
 
     return ApiBooking(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
-      categoryId: (json['categoryId'] ?? json['category']?['id'] ?? '')
-          .toString(),
-      address: (json['address'] ?? '').toString(),
+      categoryId:
+          (json['categoryId'] ??
+                  _stringFromMap(json['category'], 'id') ??
+                  _stringFromMap(json['service'], 'id') ??
+                  '')
+              .toString(),
+      address: _addressLine(json['address']),
       status: ApiBookingStatus.fromString(json['status']?.toString()),
       category: category,
       scheduledAt: _parseDateTime(json['scheduledAt']),
       createdAt: _parseDateTime(json['createdAt']),
       customerId: json['customerId']?.toString(),
       professionalId: json['professionalId']?.toString(),
-      totalAmount: (json['totalAmount'] ?? json['amount']) as num?,
-      paymentStatus: json['paymentStatus']?.toString(),
+      totalAmount: _parseNumber(
+        json['totalAmount'] ??
+            json['amount'] ??
+            json['price'] ??
+            _valueFromMap(json['payment'], 'amount'),
+      ),
+      paymentStatus:
+          json['paymentStatus']?.toString() ??
+          _stringFromMap(json['payment'], 'status'),
       raw: json,
     );
   }
@@ -100,6 +113,32 @@ class ApiBooking {
     } catch (_) {
       return null;
     }
+  }
+
+  static dynamic _valueFromMap(dynamic value, String key) {
+    if (value is Map<String, dynamic>) return value[key];
+    return null;
+  }
+
+  static String? _stringFromMap(dynamic value, String key) {
+    final raw = _valueFromMap(value, key);
+    return raw?.toString();
+  }
+
+  static num? _parseNumber(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value;
+    return num.tryParse(value.toString());
+  }
+
+  static String _addressLine(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map<String, dynamic>) {
+      final line = value['line']?.toString();
+      if (line != null && line.isNotEmpty) return line;
+    }
+    return value.toString();
   }
 }
 
@@ -121,6 +160,10 @@ List<dynamic> _extractList(dynamic data) {
     for (final key in const ['items', 'bookings', 'data', 'results']) {
       final value = data[key];
       if (value is List) return value;
+      if (value is Map<String, dynamic>) {
+        final nested = _extractList(value);
+        if (nested.isNotEmpty) return nested;
+      }
     }
   }
   return const [];

@@ -17,8 +17,8 @@ class EmailLoginPage extends StatefulWidget {
   const EmailLoginPage({super.key, required this.phone});
 
   /// Phone number captured on the login sheet, in E.164 form
-  /// ('+91…'). Sent to `/auth/otp/verify` and, for first-time
-  /// logins, to `/onboarding/customer`.
+  /// ('+91…'). Sent to OTP verify and, for first-time logins,
+  /// to customer onboarding.
   final String phone;
 
   @override
@@ -42,7 +42,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   bool _isOnboarding = false;
 
   /// Cities from `GET /zones/cities` — required by
-  /// `/onboarding/customer`, so the address step lets the
+  /// `/customer-onboarding/address`, so the address step lets the
   /// customer pick theirs.
   List<City> _cities = const [];
   String? _selectedCityId;
@@ -98,29 +98,25 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
     await _completeOnboarding();
   }
 
-  /// Step 1: `POST /auth/otp/verify`. Creates the user on
+  /// Step 1: verifies the customer OTP. Creates the user on
   /// first login; returning customers skip straight in.
   Future<void> _verifyOtp() async {
     final otp = _otpController.text.trim();
     if (otp.length != 4) {
       AppHaptics.press();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the 4-digit code')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter the 4-digit code')));
       return;
     }
 
     setState(() => _isVerifying = true);
     try {
-      final session = await AuthService.instance.verifyOtp(
-        widget.phone,
-        otp,
-      );
+      final session = await AuthService.instance.verifyOtp(widget.phone, otp);
       AppHaptics.confirm();
 
-      final onboarded =
-          session.user.isOnboarded || await _fetchOnboarded();
+      final onboarded = session.user.isOnboarded || await _fetchOnboarded();
       if (onboarded) {
         _enterApp();
         return;
@@ -132,12 +128,26 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      final message = _customerOtpErrorMessage(e);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
+  }
+
+  String _customerOtpErrorMessage(ApiException e) {
+    final lower = e.message.toLowerCase();
+    final isProviderNumber =
+        e.statusCode == 403 &&
+        (lower.contains('provider') ||
+            lower.contains('professional') ||
+            lower.contains('vendor'));
+    if (isProviderNumber) {
+      return 'This number is registered as a service provider. Use a customer phone number.';
+    }
+    return e.message;
   }
 
   Future<bool> _fetchOnboarded() async {
@@ -149,9 +159,9 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
     }
   }
 
-  /// Step 3: `POST /onboarding/customer` — completes the
-  /// profile (name, phone, city, service address).
-  Future<void> _completeOnboarding() async {
+  /// Final onboarding step: saves the profile and default
+  /// service address.
+  Future<void> _completeOnboarding({bool includeSelectedAddress = true}) async {
     final cityId = _selectedCityId;
     if (cityId == null) {
       AppHaptics.press();
@@ -168,15 +178,18 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         cityId: cityId,
         name: _nameController.text.trim(),
         phone: widget.phone,
-        address: 'Selected location',
+        gender: _gender,
+        address: includeSelectedAddress
+            ? OnboardingService.defaultClientAddress
+            : null,
       );
       AppHaptics.success();
       _enterApp();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _isOnboarding = false);
     }
@@ -196,6 +209,11 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   void _selectGender(String value) {
     AppHaptics.tick();
     setState(() => _gender = value);
+  }
+
+  Future<void> _skipLocation() async {
+    AppHaptics.press();
+    await _completeOnboarding(includeSelectedAddress: false);
   }
 
   void _back() {
@@ -294,7 +312,9 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                           onCitySelected: (id) =>
                               setState(() => _selectedCityId = id),
                           onBack: _back,
+                          onSkip: _skipLocation,
                           onConfirm: _next,
+                          isSubmitting: _isOnboarding,
                         ),
                       ],
                     ),
@@ -312,11 +332,11 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                     padding: EdgeInsets.only(
                       bottom: keyboardInset + 14 + bottomInset * 0.3,
                     ),
-                      child: _NextButton(
-                        label: _buttonLabel,
-                        isLoading: _isVerifying || _isOnboarding,
-                        onTap: _next,
-                      ),
+                    child: _NextButton(
+                      label: _buttonLabel,
+                      isLoading: _isVerifying || _isOnboarding,
+                      onTap: _next,
+                    ),
                   ),
                 ),
             ],
@@ -660,7 +680,9 @@ class _AddressStep extends StatefulWidget {
     required this.selectedCityId,
     required this.onCitySelected,
     required this.onBack,
+    required this.onSkip,
     required this.onConfirm,
+    required this.isSubmitting,
   });
 
   final Color accentColor;
@@ -668,7 +690,9 @@ class _AddressStep extends StatefulWidget {
   final String? selectedCityId;
   final ValueChanged<String> onCitySelected;
   final VoidCallback onBack;
+  final VoidCallback onSkip;
   final VoidCallback onConfirm;
+  final bool isSubmitting;
 
   @override
   State<_AddressStep> createState() => _AddressStepState();
@@ -768,7 +792,9 @@ class _AddressStepState extends State<_AddressStep>
             cities: widget.cities,
             selectedCityId: widget.selectedCityId,
             onCitySelected: widget.onCitySelected,
+            onSkip: widget.onSkip,
             onConfirm: widget.onConfirm,
+            isSubmitting: widget.isSubmitting,
           ),
         ),
       ],
@@ -894,7 +920,9 @@ class _ConfirmLocationSheet extends StatelessWidget {
     required this.cities,
     required this.selectedCityId,
     required this.onCitySelected,
+    required this.onSkip,
     required this.onConfirm,
+    required this.isSubmitting,
   });
 
   final Color accentColor;
@@ -902,7 +930,9 @@ class _ConfirmLocationSheet extends StatelessWidget {
   final List<City> cities;
   final String? selectedCityId;
   final ValueChanged<String> onCitySelected;
+  final VoidCallback onSkip;
   final VoidCallback onConfirm;
+  final bool isSubmitting;
 
   @override
   Widget build(BuildContext context) {
@@ -956,7 +986,7 @@ class _ConfirmLocationSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Selected location',
+                  OnboardingService.defaultClientAddress,
                   style: TextStyle(
                     color: Color(0xFF262626),
                     fontSize: 19,
@@ -1006,27 +1036,67 @@ class _ConfirmLocationSheet extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 17),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: FilledButton(
-                    onPressed: onConfirm,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accentColor,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: isSubmitting ? null : onSkip,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: accentColor,
+                            side: BorderSide(
+                              color: accentColor.withValues(alpha: 0.34),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                          ),
+                          child: const Text(
+                            'Skip',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      'Confirm Location',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: isSubmitting ? null : onConfirm,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accentColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.3,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Confirm Location',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -1086,7 +1156,7 @@ class _SelectedLocationPin extends StatelessWidget {
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 17, vertical: 10),
               child: Text(
-                'Selected location',
+                OnboardingService.defaultClientAddress,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -1331,7 +1401,11 @@ class _CalloutPointerClipper extends CustomClipper<Path> {
 }
 
 class _NextButton extends StatefulWidget {
-  const _NextButton({required this.label, required this.onTap, this.isLoading = false});
+  const _NextButton({
+    required this.label,
+    required this.onTap,
+    this.isLoading = false,
+  });
 
   final String label;
   final VoidCallback onTap;

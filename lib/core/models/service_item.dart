@@ -10,9 +10,13 @@ class ServiceItem {
     required this.questions,
     required this.badge,
     required this.color,
+    this.categoryId,
+    this.imageUrl,
+    this.usesApiImage = false,
     this.supportsInstant = false,
   });
 
+  final String? categoryId;
   final String title;
   final String subtitle;
   final IconData icon;
@@ -21,6 +25,8 @@ class ServiceItem {
   final List<String> questions;
   final String badge;
   final Color color;
+  final String? imageUrl;
+  final bool usesApiImage;
 
   /// Whether the service can be fulfilled instantly ("now").
   ///

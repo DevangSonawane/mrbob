@@ -26,11 +26,10 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// `POST /auth/otp/request` — ask the backend for a login OTP,
-  /// then hand the phone to the OTP step. In dev the OTP is
-  /// logged server-side rather than sent over SMS.
+  /// `POST /customer-onboarding/otp/request` — ask the backend
+  /// for a customer login OTP, then hand the phone to the OTP step.
   Future<void> _openPhoneLogin() async {
-    final phone = _phoneController.text.trim();
+    final phone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (phone.length != 10) {
       AppHaptics.press();
       if (!mounted) return;
@@ -47,18 +46,30 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => EmailLoginPage(phone: '+91$phone'),
-        ),
+        MaterialPageRoute(builder: (_) => EmailLoginPage(phone: '+91$phone')),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      final message = _customerOtpErrorMessage(e);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isRequestingOtp = false);
     }
+  }
+
+  String _customerOtpErrorMessage(ApiException e) {
+    final lower = e.message.toLowerCase();
+    final isProviderNumber =
+        e.statusCode == 403 &&
+        (lower.contains('provider') ||
+            lower.contains('professional') ||
+            lower.contains('vendor'));
+    if (isProviderNumber) {
+      return 'This number is registered as a service provider. Use a customer phone number.';
+    }
+    return e.message;
   }
 
   @override
@@ -236,7 +247,10 @@ class _LoginSheet extends StatelessWidget {
                         )
                       : const Text(
                           'Continue',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                 ),
               ),

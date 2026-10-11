@@ -14,16 +14,38 @@ import '../../../../shared/widgets/voice_beam.dart';
 import '../../../../core/models/api/service_category.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
+import '../../../../core/services/api_config.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../core/services/catalog_service.dart';
-import '../../../../core/services/payment_service.dart';
+import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
 const _homeHeaderColor = Color(0xFF02462E);
+
+String? _categoryAssetPathForTitle(String title) {
+  final normalized = title
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '')
+      .replaceAll('repair', '')
+      .replaceAll('fixes', '')
+      .replaceAll('snags', '')
+      .replaceAll('servicing', '')
+      .replaceAll('service', '');
+
+  return switch (normalized) {
+    'plumber' || 'plumbing' => 'assets/service_cat/plumbing.png',
+    'electrician' || 'electrical' => 'assets/service_cat/electrician.png',
+    'painting' => 'assets/service_cat/painting.png',
+    'carpenter' || 'carpentry' => 'assets/service_cat/carpenting.png',
+    'deepinspection' || 'inspection' => 'assets/service_cat/inspection.png',
+    'ac' => 'assets/mrbob_onboarding/MrBob HVAC Ductwork Installation.png',
+    _ => null,
+  };
+}
 
 /// Blinkit-style home:
 /// - Solid green header that COLLAPSES on scroll.
@@ -42,16 +64,119 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const _allCategoriesRouteName = '/home/service-categories';
 
+  List<ServiceItem> _services = const [];
+  bool _isLoadingCategories = true;
+
   /// View filter for the service collections below. Null shows everything;
   /// the booking-mode [GlassMenu] in [_SearchBar] sets and clears it.
   BookingMode? _modeFilter;
 
   /// Services visible under the current [_modeFilter].
   List<ServiceItem> get _visibleServices => switch (_modeFilter) {
-    BookingMode.instant => services.where((s) => s.supportsInstant).toList(),
-    BookingMode.scheduled => services.where((s) => !s.supportsInstant).toList(),
-    null => services,
+    BookingMode.instant => _services.where((s) => s.supportsInstant).toList(),
+    BookingMode.scheduled =>
+      _services.where((s) => !s.supportsInstant).toList(),
+    null => _services,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await CatalogService.instance.getCategories();
+      if (!mounted) return;
+      setState(() {
+        _services = categories.map(_serviceFromCategory).toList();
+        _isLoadingCategories = false;
+      });
+    } on ApiException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _services = const [];
+        _isLoadingCategories = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _services = const [];
+        _isLoadingCategories = false;
+      });
+    }
+  }
+
+  ServiceItem _serviceFromCategory(ServiceCategory category) {
+    final local = _matchingLocalService(category.name);
+    return ServiceItem(
+      categoryId: category.id,
+      title: category.name,
+      subtitle: local?.subtitle ?? _subtitleForTier(category.tier),
+      icon: local?.icon ?? LucideIcons.wrench,
+      price: category.basePrice ?? local?.price ?? 0,
+      duration: local?.duration ?? '60 min',
+      questions: local?.questions ?? _defaultQuestions(category.name),
+      badge: category.tier ?? local?.badge ?? 'Verified',
+      color: local?.color ?? const Color(0xFFF4F1E9),
+      imageUrl: _categoryImageUrl(category.image),
+      usesApiImage: true,
+      supportsInstant: category.tier == 'REPAIR',
+    );
+  }
+
+  ServiceItem? _matchingLocalService(String categoryName) {
+    final normalized = _normalizeCategoryName(categoryName);
+    for (final service in services) {
+      if (_normalizeCategoryName(service.title) == normalized) {
+        return service;
+      }
+    }
+    for (final service in services) {
+      final local = _normalizeCategoryName(service.title);
+      if (local.contains(normalized) || normalized.contains(local)) {
+        return service;
+      }
+    }
+    return null;
+  }
+
+  String _normalizeCategoryName(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '')
+        .replaceAll('repair', '')
+        .replaceAll('fixes', '')
+        .replaceAll('snags', '')
+        .replaceAll('servicing', '')
+        .replaceAll('service', '');
+  }
+
+  String _subtitleForTier(String? tier) {
+    return switch (tier) {
+      'RENOVATION' => 'Renovation and improvement work',
+      'RECURRING' => 'Recurring home maintenance',
+      _ => 'Doorstep repair service',
+    };
+  }
+
+  List<String> _defaultQuestions(String categoryName) {
+    return [
+      'What do you need help with?',
+      'Where is the issue located?',
+      'When would you like the visit?',
+      'Is anything urgent or blocked?',
+    ];
+  }
+
+  String? _categoryImageUrl(String? imagePath) {
+    if (imagePath == null || imagePath.trim().isEmpty) return null;
+    final trimmed = imagePath.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme) return trimmed;
+    return '${ApiConfig.effectiveBaseUrl}$trimmed';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,27 +251,29 @@ class _HomePageState extends State<HomePage> {
                         padding: EdgeInsets.symmetric(
                           horizontal: horizontalInset,
                         ),
-                        child: GridView.builder(
-                          itemCount: _visibleServices.take(6).length,
-                          shrinkWrap: true,
-                          padding: EdgeInsets.zero,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 16 * scale,
-                                crossAxisSpacing: 16 * scale,
-                                childAspectRatio: 0.78,
+                        child: _isLoadingCategories
+                            ? _CategoriesLoading(scale: scale)
+                            : GridView.builder(
+                                itemCount: _visibleServices.take(6).length,
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 3,
+                                      mainAxisSpacing: 16 * scale,
+                                      crossAxisSpacing: 16 * scale,
+                                      childAspectRatio: 0.78,
+                                    ),
+                                itemBuilder: (context, index) {
+                                  final service = _visibleServices[index];
+                                  return _CategoryTile(
+                                    service: service,
+                                    scale: scale,
+                                    onTap: () => _openService(context, service),
+                                  );
+                                },
                               ),
-                          itemBuilder: (context, index) {
-                            final service = _visibleServices[index];
-                            return _CategoryTile(
-                              service: service,
-                              scale: scale,
-                              onTap: () => _openService(context, service),
-                            );
-                          },
-                        ),
                       ),
                       Padding(
                         padding: EdgeInsets.fromLTRB(
@@ -157,8 +284,12 @@ class _HomePageState extends State<HomePage> {
                         ),
                         child: _SectionHeader(
                           title: 'Popular Services',
-                          onViewAll: () =>
-                              _openService(context, _visibleServices.first),
+                          onViewAll: _visibleServices.isEmpty
+                              ? null
+                              : () => _openService(
+                                  context,
+                                  _visibleServices.first,
+                                ),
                         ),
                       ),
                       SizedBox(
@@ -285,8 +416,10 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(
         settings: const RouteSettings(name: _allCategoriesRouteName),
-        builder: (_) =>
-            _AllServiceCategoriesPage(onServiceSelected: _openService),
+        builder: (_) => _AllServiceCategoriesPage(
+          services: _services,
+          onServiceSelected: _openService,
+        ),
       ),
     );
   }
@@ -1489,25 +1622,34 @@ class _PaymentPageState extends State<_PaymentPage> {
     if (_paying) {
       return;
     }
+    final user = TokenStore.instance.user;
+    if (!TokenStore.instance.hasSession || user == null || !user.isCustomer) {
+      AppHaptics.press();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in with a customer account to book.'),
+        ),
+      );
+      return;
+    }
     AppHaptics.confirm();
     setState(() => _paying = true);
 
     Booking booked;
-    String? notice;
     try {
       booked = await _createBooking();
-    } on ApiException catch (_) {
-      // Backend unreachable or the service has no backend
-      // category yet — record the booking locally so the
-      // demo stays usable offline.
-      booked = Booking(
-        service: widget.service,
-        mode: BookingMode.scheduled.label,
-        slot: widget.slotLabel,
-        payment: _methods[_methodIndex].label,
-        total: _total,
-      );
-      notice = 'Couldn\'t reach the server — booking saved locally (demo).';
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _paying = false);
+      final message = e.statusCode == 403
+          ? 'Your session is not a customer session. Please sign out and sign in again with phone OTP.'
+          : e.message;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
     }
 
     if (!mounted) {
@@ -1515,10 +1657,9 @@ class _PaymentPageState extends State<_PaymentPage> {
     }
     widget.onPaid(booked);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text(
-          notice ??
-              'Payment successful — your professional will be assigned shortly.',
+          'Payment successful — your professional will be assigned shortly.',
         ),
       ),
     );
@@ -1541,41 +1682,61 @@ class _PaymentPageState extends State<_PaymentPage> {
     }
   }
 
-  /// `POST /bookings` — creates the booking on the backend,
-  /// then `POST /payments/bookings/{id}/order` when paying
-  /// online (the Razorpay order id would be handed to the
-  /// Razorpay SDK in a production build).
+  /// `POST /bookings` — creates the booking on the backend.
+  /// Online bookings now get their checkout payload from this
+  /// same response per the current booking API.
   Future<Booking> _createBooking() async {
-    final categories = await CatalogService.instance.getCategories();
-    final category = _matchCategory(categories, widget.service.title);
-    if (category == null) {
-      throw const ApiException(
-        'Service not available in your area yet',
-      );
-    }
+    final categoryId = widget.service.categoryId ?? await _categoryIdByName();
 
-    final address =
-        TokenStore.instance.user?.address ?? 'Selected location';
+    final paymentMethod = _methods[_methodIndex].label;
+    final paymentMode = paymentMethod == 'Cash after service'
+        ? 'PAY_AFTER_SERVICE'
+        : 'ONLINE';
+    final scheduledAt = _safeScheduledAt(_parseSlot(widget.slotLabel));
+    final addressId = await OnboardingService.instance.ensureDefaultAddress();
 
     final created = await BookingService.instance.create(
-      categoryId: category.id,
-      address: address,
-      scheduledAt: _parseSlot(widget.slotLabel),
+      categoryId: categoryId,
+      scheduledAt: scheduledAt,
+      description: _bookingDescription(),
+      paymentMode: paymentMode,
+      addressId: addressId,
     );
-
-    if (_methods[_methodIndex].label != 'Cash after service') {
-      await PaymentService.instance.createOrder(created.id);
-    }
 
     return Booking(
       id: created.id,
       service: widget.service,
       mode: BookingMode.scheduled.label,
       slot: widget.slotLabel,
-      payment: _methods[_methodIndex].label,
+      payment: paymentMethod,
       total: _total,
       status: BookingStatus.confirmed,
     );
+  }
+
+  String _bookingDescription() {
+    final trimmed = widget.description.trim();
+    if (trimmed.length >= 10) {
+      return trimmed;
+    }
+    return 'Customer requested ${widget.service.title} service.';
+  }
+
+  DateTime _safeScheduledAt(DateTime? parsed) {
+    final minimum = DateTime.now().add(const Duration(minutes: 65));
+    if (parsed == null || parsed.isBefore(minimum)) {
+      return minimum;
+    }
+    return parsed;
+  }
+
+  Future<String> _categoryIdByName() async {
+    final categories = await CatalogService.instance.getCategories();
+    final category = _matchCategory(categories, widget.service.title);
+    if (category == null) {
+      throw const ApiException('Service not available in your area yet');
+    }
+    return category.id;
   }
 
   /// Matches a local catalog service to a backend category
@@ -2124,8 +2285,12 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
 }
 
 class _AllServiceCategoriesPage extends StatelessWidget {
-  const _AllServiceCategoriesPage({required this.onServiceSelected});
+  const _AllServiceCategoriesPage({
+    required this.services,
+    required this.onServiceSelected,
+  });
 
+  final List<ServiceItem> services;
   final Future<void> Function(BuildContext context, ServiceItem service)
   onServiceSelected;
 
@@ -2641,7 +2806,7 @@ class _LocationBar extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'San Antinoe, Tx',
+                        OnboardingService.defaultClientAddress,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -2990,7 +3155,7 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title, required this.onViewAll});
 
   final String title;
-  final VoidCallback onViewAll;
+  final VoidCallback? onViewAll;
 
   @override
   Widget build(BuildContext context) {
@@ -3032,6 +3197,29 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _CategoriesLoading extends StatelessWidget {
+  const _CategoriesLoading({required this.scale});
+
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 212 * scale,
+      child: const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: AppColors.brandForest,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.service,
@@ -3046,6 +3234,7 @@ class _CategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assetPath = _categoryAssetPath(service);
+    final imageUrl = service.imageUrl;
 
     return InkWell(
       onTap: () {
@@ -3072,20 +3261,22 @@ class _CategoryTile extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
-                child: assetPath == null
-                    ? Center(
-                        child: Icon(
-                          service.icon,
-                          color: AppColors.brandForest,
-                          size: 34 * scale,
-                        ),
+                child: imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       )
-                    : Image.asset(
+                    : assetPath != null && !service.usesApiImage
+                    ? Image.asset(
                         assetPath,
                         width: double.infinity,
                         height: double.infinity,
                         fit: BoxFit.cover,
-                      ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ),
@@ -3123,15 +3314,7 @@ class _CategoryTile extends StatelessWidget {
   }
 
   String? _categoryAssetPath(ServiceItem service) {
-    return switch (service.title) {
-      'Civil touch-ups' => 'assets/service_cat/ceiling.png',
-      'Plumbing fixes' => 'assets/service_cat/plumbing.png',
-      'Electrical snags' => 'assets/electrician.png',
-      'Painting repairs' => 'assets/service_cat/painting.png',
-      'Carpentry fixes' => 'assets/service_cat/carpenting.png',
-      'Deep inspection' => 'assets/service_cat/inspection.png',
-      _ => null,
-    };
+    return _categoryAssetPathForTitle(service.title);
   }
 }
 
@@ -3149,6 +3332,8 @@ class _PopularServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final originalPrice = service.price + 200;
+    final imageUrl = service.imageUrl;
+    final assetPath = _categoryAssetPathForTitle(service.title);
 
     return SizedBox(
       width: 202 * scale,
@@ -3188,22 +3373,39 @@ class _PopularServiceCard extends StatelessWidget {
                       decoration: BoxDecoration(color: service.color),
                       child: Stack(
                         children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _ServicePatternPainter(
-                                color: AppColors.brandForest,
+                          if (imageUrl != null)
+                            Positioned.fill(
+                              child: Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    const SizedBox.shrink(),
                               ),
                             ),
-                          ),
-                          Positioned(
-                            right: 10 * scale,
-                            bottom: 8 * scale,
-                            child: Icon(
-                              service.icon,
-                              color: AppColors.brandForest,
-                              size: 72 * scale,
+                          if (imageUrl == null && assetPath != null)
+                            Positioned.fill(
+                              child: Image.asset(assetPath, fit: BoxFit.cover),
                             ),
-                          ),
+                          if (imageUrl == null &&
+                              assetPath == null &&
+                              !service.usesApiImage) ...[
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _ServicePatternPainter(
+                                  color: AppColors.brandForest,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 10 * scale,
+                              bottom: 8 * scale,
+                              child: Icon(
+                                service.icon,
+                                color: AppColors.brandForest,
+                                size: 72 * scale,
+                              ),
+                            ),
+                          ],
                           Positioned(
                             left: 10 * scale,
                             top: 10 * scale,
