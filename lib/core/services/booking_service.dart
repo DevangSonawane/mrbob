@@ -8,11 +8,11 @@ import '../models/api/api_booking.dart';
 /// and status transitions. Assignment/dispatch endpoints are
 /// admin/ops and intentionally absent.
 class BookingService {
-  BookingService._();
+  BookingService({ApiClient? api}) : _api = api ?? ApiClient.instance;
 
-  static final BookingService instance = BookingService._();
+  static final BookingService instance = BookingService();
 
-  final _api = ApiClient.instance;
+  final ApiClient _api;
 
   /// `POST /bookings` — create a booking (status PENDING).
   ///
@@ -52,16 +52,16 @@ class BookingService {
     return '${local.toIso8601String()}$sign$hours:$minutes';
   }
 
-  /// `GET /bookings` — bookings visible to the current user.
+  /// `GET /customer/bookings` — bookings visible to the current customer.
   Future<List<ApiBooking>> list() async {
-    final data = await _api.get('/bookings');
+    final data = await _api.get('/customer/bookings');
     return parseBookingList(data);
   }
 
-  /// `GET /bookings/{id}` — a single booking (customer on the
-  /// booking, or admin).
+  /// `GET /customer/bookings/{id}` — a single booking owned by the
+  /// current customer.
   Future<ApiBooking> getById(String id) async {
-    final data = await _api.get('/bookings/$id');
+    final data = await _api.get('/customer/bookings/$id');
     if (data is! Map<String, dynamic>) {
       throw const ApiException('Unexpected booking response');
     }

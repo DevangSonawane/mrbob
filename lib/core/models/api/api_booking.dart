@@ -27,8 +27,8 @@ enum ApiBookingStatus {
       );
 }
 
-/// Booking as returned by `GET /bookings`, `GET /bookings/{id}`
-/// and `POST /bookings`.
+/// Booking as returned by `GET /customer/bookings`,
+/// `GET /customer/bookings/{id}` and `POST /bookings`.
 ///
 /// Response fields beyond id/status/address/scheduledAt are not
 /// in the OpenAPI spec, so the parser is defensive: unknown

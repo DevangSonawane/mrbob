@@ -2,7 +2,7 @@ import '../models/api/api_booking.dart';
 import '../models/booking.dart';
 import 'services_data.dart';
 
-/// Maps a backend booking (`GET /bookings`) onto the local
+/// Maps a backend booking (`GET /customer/bookings`) onto the local
 /// display model the existing UI renders.
 ///
 /// The backend category name is matched against the local

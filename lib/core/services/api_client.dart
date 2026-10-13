@@ -14,11 +14,11 @@ import 'token_store.dart';
 ///   return top-level `items`/`meta`, so those envelopes are preserved.
 /// - Throws [ApiException] with the backend's `message` on failure.
 class ApiClient {
-  ApiClient._();
+  ApiClient({http.Client? client}) : _http = client ?? http.Client();
 
-  static final ApiClient instance = ApiClient._();
+  static final ApiClient instance = ApiClient();
 
-  final http.Client _http = http.Client();
+  final http.Client _http;
 
   Future<http.Response> _send(
     String method,
@@ -26,9 +26,8 @@ class ApiClient {
     Map<String, String>? query,
     dynamic body,
   }) async {
-    final uri = Uri.parse(
-      ApiConfig.effectiveBaseUrl + path,
-    ).replace(queryParameters: query);
+    final uri = Uri.parse(ApiConfig.effectiveBaseUrl + path)
+        .replace(queryParameters: query);
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',

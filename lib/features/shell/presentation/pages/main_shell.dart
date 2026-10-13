@@ -35,7 +35,7 @@ class _MainShellState extends State<MainShell> {
     _loadBookings();
   }
 
-  /// `GET /bookings` — the customer's own bookings.
+  /// `GET /customer/bookings` — the customer's own bookings.
   Future<void> _loadBookings() async {
     if (mounted) {
       setState(() {

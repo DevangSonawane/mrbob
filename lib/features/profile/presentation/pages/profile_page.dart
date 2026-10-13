@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/api/app_user.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/user_service.dart';
 import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
@@ -32,6 +33,23 @@ class _ProfilePageState extends State<ProfilePage> {
   /// the app was entered via a demo shortcut.
   AppUser? get _user => TokenStore.instance.user;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      await UserService.instance.getProfile();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Keep the cached auth user when the profile endpoint is unavailable.
+    }
+  }
+
   String get _displayName {
     final name = _user?.name ?? '';
     return name.isEmpty ? 'Aarav Mehta' : name;
@@ -52,9 +70,7 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Sign out?'),
-        content: const Text(
-          'You\'ll need your phone OTP to sign back in.',
-        ),
+        content: const Text('You\'ll need your phone OTP to sign back in.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),

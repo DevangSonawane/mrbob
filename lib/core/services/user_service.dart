@@ -1,20 +1,31 @@
 import 'api_client.dart';
 import 'api_exception.dart';
+import 'token_store.dart';
 import '../models/api/app_user.dart';
 import '../models/api/professional.dart';
 
 /// Users module — the customer's own profile.
 ///
-/// Only `PATCH /users/me` is customer-facing. The list/get/
-/// activate endpoints are admin-only and intentionally absent.
+/// Customer-facing profile operations live under `/customer/profile`.
 class UserService {
-  UserService._();
+  UserService({ApiClient? api}) : _api = api ?? ApiClient.instance;
 
-  static final UserService instance = UserService._();
+  static final UserService instance = UserService();
 
-  final _api = ApiClient.instance;
+  final ApiClient _api;
 
-  /// `PATCH /users/me` — update the current user's profile.
+  /// `GET /customer/profile` — fetch the current customer's profile.
+  Future<AppUser> getProfile() async {
+    final data = await _api.get('/customer/profile');
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('Unexpected profile response');
+    }
+    final user = AppUser.fromJson(data);
+    await TokenStore.instance.updateUser(user);
+    return user;
+  }
+
+  /// `PATCH /customer/profile` — update the current customer's profile.
   Future<AppUser> updateMe({
     String? name,
     String? phone,
@@ -24,12 +35,20 @@ class UserService {
     if (name != null) body['name'] = name;
     if (phone != null) body['phone'] = phone;
     if (address != null) body['address'] = address;
-    final data = await _api.patch('/users/me', body: body);
+    final data = await _api.patch('/customer/profile', body: body);
     if (data is! Map<String, dynamic>) {
       throw const ApiException('Unexpected user response');
     }
     final user = AppUser.fromJson(data);
+    await TokenStore.instance.updateUser(user);
     return user;
+  }
+
+  /// `DELETE /customer/profile` — permanently delete the current
+  /// customer account and clear the local session.
+  Future<void> deleteAccount() async {
+    await _api.delete('/customer/profile');
+    await TokenStore.instance.clear();
   }
 }
 
