@@ -9,9 +9,12 @@ import '../../../../core/models/booking.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../invoices/presentation/pages/invoice_page.dart';
 
 const _pinkBg = Color(0xFFF9ECEC);
+const _successBg = Color(0xFFE8F5E9);
 const _sealRed = Color(0xFFCE2E30);
+const _sealGreen = Color(0xFF1F9D55);
 const _ink = Color(0xFF212121);
 const _pink = Color(0xFFEC407A);
 const _pinkSoft = Color(0xFFFCE7F1);
@@ -39,11 +42,15 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   @override
   Widget build(BuildContext context) {
     final booking = widget.booking;
+    final isCompleted = booking.status == BookingStatus.completed;
+    final headerBackground = isCompleted ? _successBg : _pinkBg;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
-      backgroundColor: _pinkBg,
+      backgroundColor: headerBackground,
       body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: _pinkBg),
+        value: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: headerBackground,
+        ),
         child: SafeArea(
           bottom: false,
           child: Column(
@@ -66,14 +73,16 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const SizedBox(
+              SizedBox(
                 width: 104,
                 height: 104,
-                child: CustomPaint(painter: _SealPainter()),
+                child: CustomPaint(
+                  painter: _SealPainter(isSuccess: isCompleted),
+                ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Payment failed',
+              Text(
+                _headingFor(booking.status),
                 style: TextStyle(
                   color: _ink,
                   fontSize: 20,
@@ -238,16 +247,38 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                                 child: Divider(height: 1),
                               ),
                             ],
-                            _ActionRow(
-                              icon: LucideIcons.indianRupee,
-                              title: 'Payment Details',
-                              subtitle: 'View detailed price summary',
-                              onTap: () => _showPriceSummary(context, booking),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Divider(height: 1),
-                            ),
+                            if (booking.hasPaymentDetails) ...[
+                              _ActionRow(
+                                icon: LucideIcons.indianRupee,
+                                title: 'Payment Details',
+                                subtitle: 'View detailed price summary',
+                                onTap: () =>
+                                    _showPriceSummary(context, booking),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(height: 1),
+                              ),
+                            ],
+                            if (booking.status == BookingStatus.completed &&
+                                booking.id.isNotEmpty) ...[
+                              _ActionRow(
+                                icon: LucideIcons.receiptText,
+                                title: 'View invoice',
+                                subtitle:
+                                    'See the final bill and payment status',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        InvoicePage(bookingId: booking.id),
+                                  ),
+                                ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(height: 1),
+                              ),
+                            ],
                             _ActionRow(
                               icon: LucideIcons.headset,
                               title: 'Contact Support',
@@ -274,6 +305,12 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       ),
     );
   }
+
+  String _headingFor(BookingStatus status) => switch (status) {
+    BookingStatus.completed => 'Service completed',
+    BookingStatus.cancelled => 'Booking cancelled',
+    BookingStatus.confirmed || BookingStatus.inService => 'Booking in progress',
+  };
 
   /// `PATCH /bookings/{id}/status` — transitions the
   /// booking on the backend, then refreshes the list
@@ -474,9 +511,11 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-/// Red scalloped seal with a rounded white X, as in the reference.
+/// Scalloped status seal: a green tick for completed service, red X otherwise.
 class _SealPainter extends CustomPainter {
-  const _SealPainter();
+  const _SealPainter({required this.isSuccess});
+
+  final bool isSuccess;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -498,25 +537,39 @@ class _SealPainter extends CustomPainter {
       }
     }
     path.close();
-    canvas.drawPath(path, Paint()..color = _sealRed);
+    canvas.drawPath(path, Paint()..color = isSuccess ? _sealGreen : _sealRed);
 
-    final arm = base * 0.24;
-    final xPaint = Paint()
+    final markPaint = Paint()
       ..color = Colors.white
       ..strokeWidth = base * 0.12
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      center + Offset(-arm, -arm),
-      center + Offset(arm, arm),
-      xPaint,
-    );
-    canvas.drawLine(
-      center + Offset(-arm, arm),
-      center + Offset(arm, -arm),
-      xPaint,
-    );
+    if (isSuccess) {
+      canvas.drawLine(
+        center + Offset(-base * .28, 0),
+        center + Offset(-base * .06, base * .22),
+        markPaint,
+      );
+      canvas.drawLine(
+        center + Offset(-base * .06, base * .22),
+        center + Offset(base * .31, -base * .20),
+        markPaint,
+      );
+    } else {
+      final arm = base * .24;
+      canvas.drawLine(
+        center + Offset(-arm, -arm),
+        center + Offset(arm, arm),
+        markPaint,
+      );
+      canvas.drawLine(
+        center + Offset(-arm, arm),
+        center + Offset(arm, -arm),
+        markPaint,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _SealPainter oldDelegate) =>
+      oldDelegate.isSuccess != isSuccess;
 }

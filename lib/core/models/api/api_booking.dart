@@ -46,6 +46,7 @@ class ApiBooking {
     this.professionalId,
     this.totalAmount,
     this.paymentStatus,
+    this.paymentMode,
     this.raw = const {},
   });
 
@@ -60,6 +61,7 @@ class ApiBooking {
   final String? professionalId;
   final num? totalAmount;
   final String? paymentStatus;
+  final String? paymentMode;
   final Map<String, dynamic> raw;
 
   bool get isActive =>
@@ -70,6 +72,11 @@ class ApiBooking {
       status == ApiBookingStatus.inProgress;
 
   DateTime? get dateTime => scheduledAt ?? createdAt;
+
+  /// A payment section is optional on booking payloads. Use this to avoid
+  /// presenting a payment action for bookings that have no payment data.
+  bool get hasPaymentDetails =>
+      paymentStatus != null || raw['payment'] is Map<String, dynamic>;
 
   factory ApiBooking.fromJson(Map<String, dynamic> json) {
     ServiceCategory? category;
@@ -102,6 +109,9 @@ class ApiBooking {
       paymentStatus:
           json['paymentStatus']?.toString() ??
           _stringFromMap(json['payment'], 'status'),
+      paymentMode:
+          json['paymentMode']?.toString() ??
+          _stringFromMap(json['payment'], 'mode'),
       raw: json,
     );
   }

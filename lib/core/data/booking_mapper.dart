@@ -33,9 +33,12 @@ Booking mapApiBooking(ApiBooking api) {
     service: service,
     mode: isInstant ? 'Instant' : 'Scheduled',
     slot: isInstant ? 'ASAP, 20 min' : _formatSlot(scheduledAt),
-    payment: api.paymentStatus != null ? 'Pay now' : 'Pay on delivery',
+    payment: api.paymentMode == 'PAY_AFTER_SERVICE'
+        ? 'Pay on delivery'
+        : 'Pay now',
     total: api.totalAmount?.toInt() ?? service.price,
     status: _mapStatus(api.status),
+    hasPaymentDetails: api.hasPaymentDetails,
   );
 }
 

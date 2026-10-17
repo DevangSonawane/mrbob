@@ -26,8 +26,9 @@ class ApiClient {
     Map<String, String>? query,
     dynamic body,
   }) async {
-    final uri = Uri.parse(ApiConfig.effectiveBaseUrl + path)
-        .replace(queryParameters: query);
+    final uri = Uri.parse(
+      ApiConfig.effectiveBaseUrl + path,
+    ).replace(queryParameters: query);
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -107,6 +108,15 @@ class ApiClient {
 
   Future<dynamic> delete(String path) async {
     return _unwrap(await _send('DELETE', path));
+  }
+
+  /// Fetches authenticated binary content, such as a customer invoice PDF.
+  Future<List<int>> getBytes(String path) async {
+    final response = await _send('GET', path);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _unwrap(response);
+    }
+    return response.bodyBytes;
   }
 
   String _errorMessage(Map<String, dynamic> decoded, int status) {
