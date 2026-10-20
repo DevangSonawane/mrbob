@@ -2,6 +2,10 @@
     <!-- Speech-to-text problem descriptions need mic + speech recognition. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Service address pin + "vendors nearby" estimate need the device
+         location. Coarse is enough for the nearby-vendors radius. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="mrbob"
         android:name="${applicationName}"

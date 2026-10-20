@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/models/api/zone_models.dart';
+import '../../../../core/models/geo_point.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/catalog_service.dart';
+import '../../../../core/services/location_service.dart';
 import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
@@ -32,6 +34,11 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
   String? _selectedCityId;
   bool _isLoadingCities = true;
   bool _isSubmitting = false;
+
+  /// Where the service address sits. H3 dispatch matches the booking on
+  /// this position, so it is saved with the address.
+  GeoPoint? _point;
+  bool _isLocating = false;
 
   @override
   void initState() {
@@ -67,6 +74,34 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
     super.dispose();
   }
 
+  /// Pins the service address on the device position.
+  Future<void> _useCurrentLocation() async {
+    setState(() => _isLocating = true);
+    try {
+      final position = await LocationService.instance.currentPosition();
+      if (!mounted) return;
+      AppHaptics.confirm();
+      setState(() {
+        _point = position;
+        _isLocating = false;
+      });
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _isLocating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLocating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(content: Text('Could not read your location.')),
+      );
+    }
+  }
+
   Future<void> _submit() async {
     final cityId = _selectedCityId;
     if (cityId == null) {
@@ -85,6 +120,8 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         address: OnboardingService.defaultClientAddress,
+        latitude: _point?.latitude,
+        longitude: _point?.longitude,
       );
       AppHaptics.success();
       if (!mounted) return;
@@ -279,20 +316,75 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
                       const SizedBox(height: 16),
                       _LabeledField(
                         label: 'Service address (optional)',
-                        child: TextField(
-                          controller: _addressController,
-                          readOnly: true,
-                          textCapitalization: TextCapitalization.words,
-                          maxLines: 2,
-                          style: const TextStyle(
-                            color: AppColors.brandForest,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Flat, street, landmark',
-                            prefixIcon: Icon(Icons.home_rounded, size: 20),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _addressController,
+                              readOnly: true,
+                              textCapitalization: TextCapitalization.words,
+                              maxLines: 2,
+                              style: const TextStyle(
+                                color: AppColors.brandForest,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'Flat, street, landmark',
+                                prefixIcon: Icon(
+                                  Icons.home_rounded,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _isLocating
+                                      ? null
+                                      : _useCurrentLocation,
+                                  icon: _isLocating
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.my_location_rounded,
+                                          size: 16,
+                                        ),
+                                  label: const Text('Use my location'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppColors.brandForest,
+                                    padding: EdgeInsets.zero,
+                                    textStyle: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                if (_point != null) ...[
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${_point!.roundedLatitude}, '
+                                      '${_point!.roundedLongitude}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: AppColors.mutedText,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],

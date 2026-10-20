@@ -1,7 +1,8 @@
+import 'address_service.dart';
 import 'api_client.dart';
-import 'catalog_service.dart';
 import 'token_store.dart';
 import '../models/api/app_user.dart';
+import '../models/api/customer_address.dart';
 
 /// Customer onboarding module.
 class OnboardingService {
@@ -9,10 +10,10 @@ class OnboardingService {
 
   static final OnboardingService instance = OnboardingService._();
   static const defaultClientAddress = 'Andheri West, Mumbai, Maharashtra';
-  static const defaultAddressLine1 = 'Andheri West';
-  static const defaultAddressLine2 = 'Mumbai';
-  static const defaultAddressState = 'Maharashtra';
-  static const defaultAddressPincode = '400053';
+  static const defaultAddressLine1 = AddressService.defaultLine1;
+  static const defaultAddressLine2 = AddressService.defaultLine2;
+  static const defaultAddressState = AddressService.defaultState;
+  static const defaultAddressPincode = AddressService.defaultPincode;
 
   final _api = ApiClient.instance;
 
@@ -43,12 +44,18 @@ class OnboardingService {
   /// Completes customer onboarding using the documented flow:
   /// `PUT /customer-onboarding/profile`, then
   /// `PUT /customer-onboarding/address`.
+  ///
+  /// [latitude] / [longitude] come from the map pin the customer placed.
+  /// They are what H3 dispatch matches on, so an onboarding address
+  /// without them falls straight through to "open to all vendors".
   Future<AppUser> completeCustomerOnboarding({
     required String cityId,
     String? name,
     String? phone,
     String? gender,
     String? address,
+    double? latitude,
+    double? longitude,
   }) async {
     final profileBody = {
       if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
@@ -72,6 +79,10 @@ class OnboardingService {
         'line2': defaultAddressLine2,
         'state': defaultAddressState,
         'pincode': defaultAddressPincode,
+        if (latitude != null && longitude != null) ...{
+          'latitude': latitude,
+          'longitude': longitude,
+        },
         if (phone != null && phone.trim().isNotEmpty)
           'contactPhone': phone.trim(),
       },
@@ -82,63 +93,23 @@ class OnboardingService {
     return user;
   }
 
-  /// Ensures the current customer has a saved default address
-  /// and returns its id for `POST /bookings`.
+  /// Ensures the current customer has a saved default address and
+  /// returns its id for `POST /bookings`.
+  ///
+  /// The address is resolved through [AddressService.addressForBooking],
+  /// so it carries a position when the device can provide one.
   Future<String?> ensureDefaultAddress() async {
-    final existing = await _listAddresses();
-    final defaultAddress = existing.cast<Map<String, dynamic>?>().firstWhere(
-      (address) => address?['isDefault'] == true,
-      orElse: () => existing.isNotEmpty ? existing.first : null,
-    );
-    final defaultId = defaultAddress?['id'] ?? defaultAddress?['_id'];
-    if (defaultId != null && defaultId.toString().isNotEmpty) {
-      return defaultId.toString();
-    }
-
-    final cityId = await _defaultCityId();
-    if (cityId == null || cityId.isEmpty) {
-      return null;
-    }
-
-    final created = await _api.post(
-      '/users/me/addresses',
-      body: {
-        'label': 'HOME',
-        'line1': defaultAddressLine1,
-        'line2': defaultAddressLine2,
-        'cityId': cityId,
-        'state': defaultAddressState,
-        'pincode': defaultAddressPincode,
-        'isDefault': true,
-      },
-    );
-    if (created is Map<String, dynamic>) {
-      final id = created['id'] ?? created['_id'];
-      return id?.toString();
-    }
-    return null;
+    final address = await AddressService.instance.addressForBooking();
+    final id = address?.id ?? '';
+    return id.isEmpty ? null : id;
   }
 
-  Future<List<Map<String, dynamic>>> _listAddresses() async {
-    final data = await _api.get('/users/me/addresses');
-    final list = data is List ? data : const <dynamic>[];
-    return list.whereType<Map<String, dynamic>>().toList();
-  }
+  /// The saved addresses of the current customer.
+  Future<List<CustomerAddress>> listAddresses() =>
+      AddressService.instance.list();
 
-  Future<String?> _defaultCityId() async {
-    final userCityId = TokenStore.instance.user?.cityId;
-    if (userCityId != null && userCityId.isNotEmpty) {
-      return userCityId;
-    }
-    final cities = await CatalogService.instance.getCities();
-    for (final city in cities) {
-      final normalized = city.name.toLowerCase();
-      if (normalized.contains('mumbai')) {
-        return city.id;
-      }
-    }
-    return cities.isNotEmpty ? cities.first.id : null;
-  }
+  /// The city the customer's addresses belong to.
+  Future<String?> defaultCityId() => AddressService.instance.defaultCityId();
 
   AppUser _parseUser(dynamic data) {
     if (data is Map<String, dynamic>) {

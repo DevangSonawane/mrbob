@@ -19,8 +19,28 @@ class ApiClient {
   static final ApiClient instance = ApiClient();
 
   final http.Client _http;
+  Future<void>? _refreshInProgress;
+
+  bool _requiresAuth(String path) =>
+      path != '/auth/refresh' &&
+      path != '/auth/logout' &&
+      path != '/auth/login' &&
+      path != '/auth/signup' &&
+      !path.startsWith('/customer-onboarding/otp/');
 
   Future<http.Response> _send(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    dynamic body,
+  }) async {
+    if (_requiresAuth(path)) {
+      await _refreshIfExpiring();
+    }
+    return _sendRaw(method, path, query: query, body: body);
+  }
+
+  Future<http.Response> _sendRaw(
     String method,
     String path, {
     Map<String, String>? query,
@@ -34,7 +54,7 @@ class ApiClient {
       'Accept': 'application/json',
     };
     final token = TokenStore.instance.accessToken;
-    if (token != null) {
+    if (_requiresAuth(path) && token != null) {
       headers['Authorization'] = 'Bearer $token';
     }
     final encoded = body == null ? null : jsonEncode(body);
@@ -83,40 +103,130 @@ class ApiClient {
     final message = decoded is Map<String, dynamic>
         ? _errorMessage(decoded, status)
         : 'Request failed ($status)';
-    throw ApiException(
-      message,
-      statusCode: status,
-      code: decoded is Map<String, dynamic> ? decoded['code'] as String? : null,
+    throw ApiException(message, statusCode: status, code: _errorCode(decoded));
+  }
+
+  String? _errorCode(dynamic decoded) {
+    if (decoded is! Map<String, dynamic>) return null;
+    final details = decoded['details'];
+    return (details is Map<String, dynamic> ? details['code'] : decoded['code'])
+        ?.toString();
+  }
+
+  Future<void> _refreshIfExpiring() async {
+    final expiresAt = TokenStore.instance.accessTokenExpiresAt;
+    if (expiresAt == null ||
+        expiresAt.difference(DateTime.now()) >= const Duration(seconds: 60)) {
+      return;
+    }
+    await _refreshOnce();
+  }
+
+  Future<void> _refreshOnce() {
+    return _refreshInProgress ??= _performRefresh().whenComplete(
+      () => _refreshInProgress = null,
     );
   }
 
+  Future<void> _performRefresh() async {
+    final refreshToken = TokenStore.instance.refreshToken;
+    if (refreshToken == null) {
+      await TokenStore.instance.clear();
+      throw const ApiException('Please sign in again', statusCode: 401);
+    }
+    final response = await _sendRaw(
+      'POST',
+      '/auth/refresh',
+      body: {'refreshToken': refreshToken},
+    );
+    if (response.statusCode == 401) {
+      await TokenStore.instance.clear();
+    }
+    final data = _unwrap(response);
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('Unexpected refresh response');
+    }
+    final access = data['accessToken']?.toString();
+    final refresh = data['refreshToken']?.toString() ?? refreshToken;
+    final expiresIn = (data['accessTokenExpiresIn'] as num?)?.toInt() ?? 900;
+    if (access == null || access.isEmpty) {
+      throw const ApiException('Unexpected refresh response');
+    }
+    await TokenStore.instance.save(
+      access,
+      refresh,
+      accessExpiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+    );
+  }
+
+  Future<dynamic> _request(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    dynamic body,
+  }) async {
+    try {
+      return _unwrap(await _send(method, path, query: query, body: body));
+    } on ApiException catch (error) {
+      if (_requiresAuth(path) &&
+          error.statusCode == 401 &&
+          error.code == 'TOKEN_EXPIRED') {
+        await _refreshOnce();
+        return _unwrap(await _sendRaw(method, path, query: query, body: body));
+      }
+      if (error.statusCode == 401 &&
+          (error.code == 'TOKEN_INVALID' || error.code == 'SESSION_EXPIRED')) {
+        await TokenStore.instance.clear();
+      }
+      rethrow;
+    }
+  }
+
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    return _unwrap(await _send('GET', path, query: query));
+    return _request('GET', path, query: query);
   }
 
   Future<dynamic> post(String path, {dynamic body}) async {
-    return _unwrap(await _send('POST', path, body: body));
+    return _request('POST', path, body: body);
   }
 
   Future<dynamic> put(String path, {dynamic body}) async {
-    return _unwrap(await _send('PUT', path, body: body));
+    return _request('PUT', path, body: body);
   }
 
   Future<dynamic> patch(String path, {dynamic body}) async {
-    return _unwrap(await _send('PATCH', path, body: body));
+    return _request('PATCH', path, body: body);
   }
 
   Future<dynamic> delete(String path) async {
-    return _unwrap(await _send('DELETE', path));
+    return _request('DELETE', path);
   }
 
   /// Fetches authenticated binary content, such as a customer invoice PDF.
   Future<List<int>> getBytes(String path) async {
-    final response = await _send('GET', path);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _unwrap(response);
+    try {
+      final response = await _send('GET', path);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _unwrap(response);
+      }
+      return response.bodyBytes;
+    } on ApiException catch (error) {
+      if (_requiresAuth(path) &&
+          error.statusCode == 401 &&
+          error.code == 'TOKEN_EXPIRED') {
+        await _refreshOnce();
+        final response = await _sendRaw('GET', path);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          _unwrap(response);
+        }
+        return response.bodyBytes;
+      }
+      if (error.statusCode == 401 &&
+          (error.code == 'TOKEN_INVALID' || error.code == 'SESSION_EXPIRED')) {
+        await TokenStore.instance.clear();
+      }
+      rethrow;
     }
-    return response.bodyBytes;
   }
 
   String _errorMessage(Map<String, dynamic> decoded, int status) {

@@ -43,8 +43,11 @@ dependencies:
   speech_to_text: ^7.5.0
   http: ^1.4.0
   shared_preferences: ^2.3.0
+  flutter_secure_storage: ^9.2.4
   file_saver: ^0.5.0
   receipt_printer: ^1.0.2
+  # GPS for the address pin + "vendors nearby" estimate.
+  geolocator: ^13.0.4
 
 dev_dependencies:
   flutter_test:

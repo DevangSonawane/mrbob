@@ -62,11 +62,13 @@ class AuthSession {
     required this.user,
     required this.accessToken,
     required this.refreshToken,
+    required this.accessTokenExpiresIn,
   });
 
   final AppUser user;
   final String accessToken;
   final String refreshToken;
+  final int accessTokenExpiresIn;
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     String pickToken(List<String> keys) {
@@ -86,6 +88,8 @@ class AuthSession {
       user: user,
       accessToken: pickToken(['accessToken', 'access_token', 'token']),
       refreshToken: pickToken(['refreshToken', 'refresh_token', 'refresh']),
+      accessTokenExpiresIn:
+          (json['accessTokenExpiresIn'] as num?)?.toInt() ?? 900,
     );
   }
 }

@@ -37,6 +37,9 @@ class AuthService {
     await TokenStore.instance.save(
       session.accessToken,
       session.refreshToken,
+      accessExpiresAt: DateTime.now().add(
+        Duration(seconds: session.accessTokenExpiresIn),
+      ),
       user: session.user,
     );
     return session;
@@ -64,6 +67,9 @@ class AuthService {
     await TokenStore.instance.save(
       session.accessToken,
       session.refreshToken,
+      accessExpiresAt: DateTime.now().add(
+        Duration(seconds: session.accessTokenExpiresIn),
+      ),
       user: session.user,
     );
     return session;
@@ -82,6 +88,9 @@ class AuthService {
     await TokenStore.instance.save(
       session.accessToken,
       session.refreshToken,
+      accessExpiresAt: DateTime.now().add(
+        Duration(seconds: session.accessTokenExpiresIn),
+      ),
       user: session.user,
     );
     return session;
@@ -100,6 +109,9 @@ class AuthService {
     await TokenStore.instance.save(
       session.accessToken,
       session.refreshToken,
+      accessExpiresAt: DateTime.now().add(
+        Duration(seconds: session.accessTokenExpiresIn),
+      ),
       user: session.user,
     );
     return session;
@@ -116,9 +128,16 @@ class AuthService {
     return user;
   }
 
-  /// Clears the persisted session (demo sign-out).
+  /// Revokes the server session, then always clears the local credentials.
   Future<void> signOut() async {
-    await TokenStore.instance.clear();
+    final refreshToken = TokenStore.instance.refreshToken;
+    try {
+      if (refreshToken != null) {
+        await _api.post('/auth/logout', body: {'refreshToken': refreshToken});
+      }
+    } finally {
+      await TokenStore.instance.clear();
+    }
   }
 
   AuthSession _sessionFrom(dynamic data) {

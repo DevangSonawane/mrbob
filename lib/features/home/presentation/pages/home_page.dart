@@ -16,12 +16,14 @@ import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/services/api_config.dart';
 import '../../../../core/services/api_exception.dart';
+import '../../../../core/services/address_service.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../booking/presentation/widgets/vendors_nearby_card.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
 const _homeHeaderColor = Color(0xFF02462E);
@@ -1614,9 +1616,34 @@ class _PaymentPageState extends State<_PaymentPage> {
   int _methodIndex = 0;
   bool _paying = false;
 
+  /// Category id used for the "vendors nearby" estimate. Resolved from
+  /// the catalogue when the service came from the local fallback list.
+  String? _categoryId;
+
   static const _platformFee = 29;
 
   int get _total => widget.service.price + _platformFee;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveCategoryId();
+  }
+
+  Future<void> _resolveCategoryId() async {
+    final known = widget.service.categoryId;
+    if (known != null && known.isNotEmpty) {
+      if (mounted) setState(() => _categoryId = known);
+      return;
+    }
+    try {
+      final resolved = await _categoryIdByName();
+      if (mounted) setState(() => _categoryId = resolved);
+    } on ApiException {
+      // The service is not in the catalogue — the estimate then counts
+      // every vendor nearby instead of only the ones for this service.
+    }
+  }
 
   Future<void> _payNow() async {
     if (_paying) {
@@ -1871,6 +1898,13 @@ class _PaymentPageState extends State<_PaymentPage> {
             ),
           ),
           const SizedBox(height: 22),
+          // "6 vendors nearby - about 12 min", so the customer knows what
+          // to expect before the booking is placed. The card collapses
+          // itself when no position is available.
+          VendorsNearbyCard(
+            categoryId: _categoryId,
+            margin: const EdgeInsets.only(bottom: 22),
+          ),
           const Text(
             'Bill details',
             style: TextStyle(
@@ -2753,14 +2787,43 @@ class _SearchBarState extends State<_SearchBar> {
 }
 
 /// Blinkit-style location row: pin + address left, actions right.
-class _LocationBar extends StatelessWidget {
+class _LocationBar extends StatefulWidget {
   const _LocationBar({required this.scale, this.showPin = true});
 
   final double scale;
   final bool showPin;
 
   @override
+  State<_LocationBar> createState() => _LocationBarState();
+}
+
+class _LocationBarState extends State<_LocationBar> {
+  /// The address bookings are placed against. H3 dispatch matches the
+  /// booking on this address, so the home header shows the real one.
+  String _label = OnboardingService.defaultClientAddress;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAddress();
+  }
+
+  Future<void> _loadAddress() async {
+    try {
+      final address = await AddressService.instance.defaultAddress();
+      if (!mounted) return;
+      final label = address?.shortLabel.trim();
+      if (label == null || label.isEmpty) return;
+      setState(() => _label = label);
+    } catch (_) {
+      // Keep the default label when the address list is unavailable.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final scale = widget.scale;
+    final showPin = widget.showPin;
     return ColoredBox(
       color: _homeHeaderColor,
       child: Row(
@@ -2806,7 +2869,7 @@ class _LocationBar extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        OnboardingService.defaultClientAddress,
+                        _label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

@@ -8,6 +8,8 @@
 	<string>MrBob needs microphone access so you can describe your problem by voice.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>MrBob transcribes your voice description so the professional arrives prepared.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MrBob uses your location to pin your service address and show how many professionals are nearby.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

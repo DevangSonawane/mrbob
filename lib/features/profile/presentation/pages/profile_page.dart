@@ -14,6 +14,7 @@ import '../../../auth/presentation/pages/login_page.dart';
 import '../../../refer/presentation/pages/refer_page.dart';
 import '../../../wallet/presentation/pages/wallet_page.dart';
 import 'disputes_page.dart';
+import 'saved_address_page.dart';
 import '../widgets/coupon_card.dart';
 
 /// Account page in the Trumarkz org-profile-settings language:
@@ -784,29 +785,6 @@ class HelpSupportPage extends StatelessWidget {
           icon: Icons.undo_rounded,
           title: 'Refunds and cancellations',
           body: 'Track wallet refunds and cancellation fees',
-        ),
-      ],
-    );
-  }
-}
-
-class SavedAddressPage extends StatelessWidget {
-  const SavedAddressPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SimplePage(
-      title: 'Saved address',
-      children: const [
-        SupportTile(
-          icon: Icons.home_rounded,
-          title: 'Green Heights',
-          body: 'A-1204, Tower A, Andheri East, Mumbai',
-        ),
-        SupportTile(
-          icon: Icons.apartment_rounded,
-          title: 'Site office',
-          body: 'Plot 18, Sector 62, Noida',
         ),
       ],
     );

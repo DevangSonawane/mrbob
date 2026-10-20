@@ -1,16 +1,17 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/api/zone_models.dart';
+import '../../../../core/models/geo_point.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/catalog_service.dart';
+import '../../../../core/services/location_service.dart';
 import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../../shared/widgets/osm_map_picker.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
 class EmailLoginPage extends StatefulWidget {
@@ -46,6 +47,11 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
   /// customer pick theirs.
   List<City> _cities = const [];
   String? _selectedCityId;
+
+  /// Where the customer dropped the address pin. H3 dispatch matches the
+  /// booking inside the hexagon that contains it, so the onboarding
+  /// address is saved with these coordinates.
+  GeoPoint? _pinPoint;
 
   @override
   void initState() {
@@ -182,6 +188,8 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
         address: includeSelectedAddress
             ? OnboardingService.defaultClientAddress
             : null,
+        latitude: _pinPoint?.latitude,
+        longitude: _pinPoint?.longitude,
       );
       AppHaptics.success();
       _enterApp();
@@ -311,6 +319,8 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
                           selectedCityId: _selectedCityId,
                           onCitySelected: (id) =>
                               setState(() => _selectedCityId = id),
+                          onPinChanged: (point) =>
+                              setState(() => _pinPoint = point),
                           onBack: _back,
                           onSkip: _skipLocation,
                           onConfirm: _next,
@@ -679,6 +689,7 @@ class _AddressStep extends StatefulWidget {
     required this.cities,
     required this.selectedCityId,
     required this.onCitySelected,
+    required this.onPinChanged,
     required this.onBack,
     required this.onSkip,
     required this.onConfirm,
@@ -689,6 +700,10 @@ class _AddressStep extends StatefulWidget {
   final List<City> cities;
   final String? selectedCityId;
   final ValueChanged<String> onCitySelected;
+
+  /// Called with the position the customer dropped the pin on.
+  final ValueChanged<GeoPoint> onPinChanged;
+
   final VoidCallback onBack;
   final VoidCallback onSkip;
   final VoidCallback onConfirm;
@@ -698,53 +713,40 @@ class _AddressStep extends StatefulWidget {
   State<_AddressStep> createState() => _AddressStepState();
 }
 
-class _AddressStepState extends State<_AddressStep>
-    with SingleTickerProviderStateMixin {
-  Offset _mapOffset = Offset.zero;
-  late final AnimationController _recenterController;
-  Animation<Offset>? _recenterAnimation;
+class _AddressStepState extends State<_AddressStep> {
+  /// Where the pin starts — the customer's city centre.
+  static const _initialPoint = GeoPoint(latitude: 19.0636, longitude: 72.83);
 
-  @override
-  void initState() {
-    super.initState();
-    _recenterController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 420),
-        )..addListener(() {
-          final animation = _recenterAnimation;
-          if (animation == null) return;
-          setState(() => _mapOffset = animation.value);
-        });
-  }
+  late GeoPoint _point = _initialPoint;
+  bool _locating = false;
 
-  @override
-  void dispose() {
-    _recenterController.dispose();
-    super.dispose();
-  }
-
-  void _dragMap(DragUpdateDetails details) {
-    _recenterController.stop();
-    setState(() {
-      _mapOffset += details.delta;
-      _mapOffset = Offset(
-        _mapOffset.dx.clamp(-180.0, 180.0),
-        _mapOffset.dy.clamp(-220.0, 220.0),
+  /// Drops the pin on the device position.
+  Future<void> _useCurrentLocation() async {
+    setState(() => _locating = true);
+    try {
+      final position = await LocationService.instance.currentPosition();
+      if (!mounted) return;
+      AppHaptics.confirm();
+      setState(() {
+        _point = position;
+        _locating = false;
+      });
+      widget.onPinChanged(position);
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(content: Text('Could not read your location.')),
       );
-    });
-  }
-
-  void _useCurrentLocation() {
-    AppHaptics.confirm();
-    _recenterAnimation = Tween<Offset>(begin: _mapOffset, end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _recenterController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-    _recenterController.forward(from: 0);
+    }
   }
 
   @override
@@ -754,13 +756,19 @@ class _AddressStepState extends State<_AddressStep>
     return Stack(
       fit: StackFit.expand,
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onPanUpdate: _dragMap,
-          child: _LocationMap(
-            accentColor: widget.accentColor,
-            offset: _mapOffset,
-          ),
+        OsmMapPicker(
+          point: _point,
+          onChanged: (point) {
+            setState(() => _point = point);
+            widget.onPinChanged(point);
+          },
+          height: null,
+          borderRadius: BorderRadius.zero,
+          // The confirm sheet covers the bottom of the screen, so the pin
+          // sits above it.
+          pinAlignment: const Alignment(0, -0.34),
+          accentColor: widget.accentColor,
+          label: OnboardingService.defaultClientAddress,
         ),
         Positioned(
           top: 18,
@@ -779,6 +787,7 @@ class _AddressStepState extends State<_AddressStep>
           bottom: 220 + bottomInset,
           child: _CurrentLocationButton(
             accentColor: widget.accentColor,
+            isLoading: _locating,
             onTap: _useCurrentLocation,
           ),
         ),
@@ -791,6 +800,7 @@ class _AddressStepState extends State<_AddressStep>
             bottomInset: bottomInset,
             cities: widget.cities,
             selectedCityId: widget.selectedCityId,
+            point: _point,
             onCitySelected: widget.onCitySelected,
             onSkip: widget.onSkip,
             onConfirm: widget.onConfirm,
@@ -882,10 +892,12 @@ class _CurrentLocationButton extends StatelessWidget {
   const _CurrentLocationButton({
     required this.accentColor,
     required this.onTap,
+    this.isLoading = false,
   });
 
   final Color accentColor;
   final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -895,18 +907,24 @@ class _CurrentLocationButton extends StatelessWidget {
       elevation: 4,
       shadowColor: Colors.black.withValues(alpha: 0.18),
       child: InkWell(
-        onTap: onTap,
+        onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-          child: const Text(
-            'Current Location',
-            style: TextStyle(
-              color: Color(0xFF303030),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text(
+                  'Current Location',
+                  style: TextStyle(
+                    color: Color(0xFF303030),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
         ),
       ),
     );
@@ -919,6 +937,7 @@ class _ConfirmLocationSheet extends StatelessWidget {
     required this.bottomInset,
     required this.cities,
     required this.selectedCityId,
+    required this.point,
     required this.onCitySelected,
     required this.onSkip,
     required this.onConfirm,
@@ -929,6 +948,11 @@ class _ConfirmLocationSheet extends StatelessWidget {
   final double bottomInset;
   final List<City> cities;
   final String? selectedCityId;
+
+  /// Where the pin sits — saved with the address so the booking can be
+  /// matched against the professionals nearby.
+  final GeoPoint point;
+
   final ValueChanged<String> onCitySelected;
   final VoidCallback onSkip;
   final VoidCallback onConfirm;
@@ -1004,6 +1028,15 @@ class _ConfirmLocationSheet extends StatelessWidget {
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${point.roundedLatitude}, ${point.roundedLongitude}',
+                  style: const TextStyle(
+                    color: Color(0xFF8B8B8B),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (cities.isNotEmpty) ...[
@@ -1107,298 +1140,6 @@ class _ConfirmLocationSheet extends StatelessWidget {
   }
 }
 
-class _LocationMap extends StatelessWidget {
-  const _LocationMap({required this.accentColor, required this.offset});
-
-  final Color accentColor;
-  final Offset offset;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _OsmTileBackground(offset: offset),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 338,
-          child: _SelectedLocationPin(accentColor: accentColor),
-        ),
-      ],
-    );
-  }
-}
-
-class _SelectedLocationPin extends StatelessWidget {
-  const _SelectedLocationPin({required this.accentColor});
-
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.25),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 17, vertical: 10),
-              child: Text(
-                OnboardingService.defaultClientAddress,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-          ClipPath(
-            clipper: _CalloutPointerClipper(),
-            child: Container(width: 18, height: 16, color: accentColor),
-          ),
-          Container(width: 3, height: 16, color: accentColor),
-          Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              color: accentColor,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.24),
-                  blurRadius: 14,
-                  spreadRadius: 7,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OsmTileBackground extends StatelessWidget {
-  const _OsmTileBackground({required this.offset});
-
-  final Offset offset;
-
-  static const _latitude = 19.2836;
-  static const _longitude = 72.8727;
-  static const _zoom = 16;
-
-  double _longToTileX(double longitude, int zoom) {
-    return (longitude + 180) / 360 * math.pow(2, zoom);
-  }
-
-  double _latToTileY(double latitude, int zoom) {
-    final latRad = latitude * math.pi / 180;
-    return (1 - math.log(math.tan(latRad) + 1 / math.cos(latRad)) / math.pi) /
-        2 *
-        math.pow(2, zoom);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final centerX = _longToTileX(_longitude, _zoom);
-    final centerY = _latToTileY(_latitude, _zoom);
-    final originX = centerX.floor() - 2;
-    final originY = centerY.floor() - 3;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tileSize = math.max(
-          constraints.maxWidth / 3.2,
-          constraints.maxHeight / 5.4,
-        );
-        final offsetX =
-            constraints.maxWidth / 2 -
-            (centerX - originX) * tileSize +
-            offset.dx;
-        final offsetY =
-            constraints.maxHeight * 0.46 -
-            (centerY - originY) * tileSize +
-            offset.dy;
-
-        return ColoredBox(
-          color: const Color(0xFFF1F0F1),
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              for (var row = 0; row < 7; row++)
-                for (var col = 0; col < 5; col++)
-                  Positioned(
-                    left: offsetX + col * tileSize,
-                    top: offsetY + row * tileSize,
-                    width: tileSize,
-                    height: tileSize,
-                    child: Image.network(
-                      'https://tile.openstreetmap.org/$_zoom/${originX + col}/${originY + row}.png',
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.medium,
-                      errorBuilder: (_, _, _) {
-                        return const CustomPaint(painter: _MapPreviewPainter());
-                      },
-                    ),
-                  ),
-              Positioned.fill(
-                child: ColoredBox(color: Colors.white.withValues(alpha: 0.18)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _MapPreviewPainter extends CustomPainter {
-  const _MapPreviewPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    paint.color = const Color(0xFFF1F0F1);
-    canvas.drawRect(Offset.zero & size, paint);
-
-    final blocks = [
-      Rect.fromLTWH(size.width * 0.02, size.height * 0.08, 120, 180),
-      Rect.fromLTWH(size.width * 0.28, size.height * 0.03, 160, 150),
-      Rect.fromLTWH(size.width * 0.64, size.height * 0.08, 132, 162),
-      Rect.fromLTWH(size.width * 0.1, size.height * 0.36, 154, 108),
-      Rect.fromLTWH(size.width * 0.58, size.height * 0.36, 156, 116),
-      Rect.fromLTWH(size.width * 0.04, size.height * 0.68, 140, 136),
-      Rect.fromLTWH(size.width * 0.62, size.height * 0.72, 126, 120),
-      Rect.fromLTWH(size.width * 0.28, size.height * 0.58, 126, 150),
-    ];
-
-    for (final rect in blocks) {
-      paint.color = const Color(0xFFE3E1E3);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
-        paint,
-      );
-      paint
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..color = const Color(0xFFD2CDD1);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.deflate(10), const Radius.circular(4)),
-        paint,
-      );
-      paint.style = PaintingStyle.fill;
-    }
-
-    final roadPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 28
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final road = Path()
-      ..moveTo(-20, size.height * 0.2)
-      ..cubicTo(
-        size.width * 0.18,
-        size.height * 0.28,
-        size.width * 0.34,
-        size.height * 0.34,
-        size.width * 0.52,
-        size.height * 0.28,
-      )
-      ..cubicTo(
-        size.width * 0.74,
-        size.height * 0.22,
-        size.width * 0.78,
-        size.height * 0.52,
-        size.width + 20,
-        size.height * 0.5,
-      );
-    canvas.drawPath(road, roadPaint);
-
-    roadPaint
-      ..color = const Color(0xFFC9C1C7)
-      ..strokeWidth = 4;
-    canvas.drawPath(road, roadPaint);
-
-    final crossRoad = Path()
-      ..moveTo(size.width * 0.24, size.height + 20)
-      ..cubicTo(
-        size.width * 0.38,
-        size.height * 0.72,
-        size.width * 0.54,
-        size.height * 0.62,
-        size.width * 0.58,
-        -20,
-      );
-    roadPaint
-      ..color = Colors.white
-      ..strokeWidth = 26;
-    canvas.drawPath(crossRoad, roadPaint);
-
-    roadPaint
-      ..color = const Color(0xFFC9C1C7)
-      ..strokeWidth = 4;
-    canvas.drawPath(crossRoad, roadPaint);
-
-    final sideRoads = [
-      Path()
-        ..moveTo(-20, size.height * 0.42)
-        ..lineTo(size.width + 20, size.height * 0.28),
-      Path()
-        ..moveTo(-20, size.height * 0.68)
-        ..lineTo(size.width + 20, size.height * 0.62),
-      Path()
-        ..moveTo(size.width * 0.14, -20)
-        ..lineTo(size.width * 0.38, size.height + 20),
-      Path()
-        ..moveTo(size.width * 0.84, -20)
-        ..lineTo(size.width * 0.72, size.height + 20),
-    ];
-
-    for (final path in sideRoads) {
-      roadPaint
-        ..color = Colors.white
-        ..strokeWidth = 15;
-      canvas.drawPath(path, roadPaint);
-      roadPaint
-        ..color = const Color(0xFFD1CCD0)
-        ..strokeWidth = 3;
-      canvas.drawPath(path, roadPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _CalloutPointerClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    return Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width * 0.5, size.height)
-      ..close();
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
 
 class _NextButton extends StatefulWidget {
   const _NextButton({

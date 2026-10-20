@@ -1,11 +1,11 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/api/app_user.dart';
 
-/// Persists the JWT pair + cached user profile across
-/// app restarts.
+/// Persists the customer session in Keychain / Android EncryptedSharedPreferences.
 ///
 /// Singleton (zero-package state, per the app's
 /// conventions). [ApiClient] reads [accessToken] from
@@ -19,26 +19,49 @@ class TokenStore {
   static const _accessKey = 'mrbob_access_token';
   static const _refreshKey = 'mrbob_refresh_token';
   static const _userKey = 'mrbob_user_json';
+  static const _accessExpiresAtKey = 'mrbob_access_expires_at';
 
-  SharedPreferences? _prefs;
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   String? accessToken;
   String? refreshToken;
+  DateTime? accessTokenExpiresAt;
   AppUser? user;
+  bool _initialized = false;
 
   bool get hasSession => accessToken != null;
 
   /// Restores the persisted session. Called once from `main()`.
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-    accessToken = _prefs!.getString(_accessKey);
-    refreshToken = _prefs!.getString(_refreshKey);
-    final userJson = _prefs!.getString(_userKey);
+    _initialized = true;
+    accessToken = await _storage.read(key: _accessKey);
+    refreshToken = await _storage.read(key: _refreshKey);
+    final expiry = await _storage.read(key: _accessExpiresAtKey);
+    accessTokenExpiresAt = expiry == null ? null : DateTime.tryParse(expiry);
+    var userJson = await _storage.read(key: _userKey);
+    // One-time migration keeps existing customer sessions usable while moving
+    // their credentials out of plain preferences.
+    if (accessToken == null && refreshToken == null) {
+      final legacy = await SharedPreferences.getInstance();
+      accessToken = legacy.getString(_accessKey);
+      refreshToken = legacy.getString(_refreshKey);
+      userJson = legacy.getString(_userKey);
+      if (accessToken != null && refreshToken != null) {
+        await _storage.write(key: _accessKey, value: accessToken);
+        await _storage.write(key: _refreshKey, value: refreshToken);
+        if (userJson != null) {
+          await _storage.write(key: _userKey, value: userJson);
+        }
+        await legacy.remove(_accessKey);
+        await legacy.remove(_refreshKey);
+        await legacy.remove(_userKey);
+      }
+    }
     if (userJson != null) {
       try {
-        user = AppUser.fromJson(
-          jsonDecode(userJson) as Map<String, dynamic>,
-        );
+        user = AppUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
       } catch (_) {
         // Corrupted cache — treat as signed out.
         await clear();
@@ -46,36 +69,48 @@ class TokenStore {
     }
   }
 
-  Future<void> save(String access, String refresh, {AppUser? user}) async {
+  Future<void> save(
+    String access,
+    String refresh, {
+    required DateTime accessExpiresAt,
+    AppUser? user,
+  }) async {
     accessToken = access;
     refreshToken = refresh;
+    accessTokenExpiresAt = accessExpiresAt;
     if (user != null) {
       this.user = user;
     }
-    final prefs = _prefs;
-    if (prefs == null) return;
-    await prefs.setString(_accessKey, access);
-    await prefs.setString(_refreshKey, refresh);
+    if (!_initialized) return;
+    await _storage.write(key: _accessKey, value: access);
+    await _storage.write(key: _refreshKey, value: refresh);
+    await _storage.write(
+      key: _accessExpiresAtKey,
+      value: accessExpiresAt.toUtc().toIso8601String(),
+    );
     if (this.user != null) {
-      await prefs.setString(_userKey, jsonEncode(this.user!.toJson()));
+      await _storage.write(
+        key: _userKey,
+        value: jsonEncode(this.user!.toJson()),
+      );
     }
   }
 
   Future<void> updateUser(AppUser newUser) async {
     user = newUser;
-    final prefs = _prefs;
-    if (prefs == null) return;
-    await prefs.setString(_userKey, jsonEncode(newUser.toJson()));
+    if (!_initialized) return;
+    await _storage.write(key: _userKey, value: jsonEncode(newUser.toJson()));
   }
 
   Future<void> clear() async {
     accessToken = null;
     refreshToken = null;
+    accessTokenExpiresAt = null;
     user = null;
-    final prefs = _prefs;
-    if (prefs == null) return;
-    await prefs.remove(_accessKey);
-    await prefs.remove(_refreshKey);
-    await prefs.remove(_userKey);
+    if (!_initialized) return;
+    await _storage.delete(key: _accessKey);
+    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _accessExpiresAtKey);
+    await _storage.delete(key: _userKey);
   }
 }
