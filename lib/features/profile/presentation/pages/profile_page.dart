@@ -10,11 +10,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../shared/widgets/simple_page.dart';
 import '../../../../shared/widgets/support_tile.dart';
-import '../../../amc/presentation/pages/amc_page.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../refer/presentation/pages/refer_page.dart';
-import '../../../reviews/presentation/pages/reviews_page.dart';
 import '../../../wallet/presentation/pages/wallet_page.dart';
+import 'disputes_page.dart';
 import '../widgets/coupon_card.dart';
 
 /// Account page in the Trumarkz org-profile-settings language:
@@ -171,18 +170,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                   builder: (_) => const WalletPage(),
                                 ),
                               ),
-                              onAmc: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AmcPage(),
-                                ),
-                              ),
-                              onReviews: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ReviewsPage(),
-                                ),
-                              ),
                               onOffers: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -195,13 +182,19 @@ class _ProfilePageState extends State<ProfilePage> {
                                   builder: (_) => const ReferPage(),
                                 ),
                               ),
+                              onHelp: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const DisputesPage(),
+                                ),
+                              ),
                             ),
                             SizedBox(height: s(24)),
                             _ManageAccountSection(
                               onHelp: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const HelpSupportPage(),
+                                  builder: (_) => const DisputesPage(),
                                 ),
                               ),
                               onAddress: () => Navigator.push(
@@ -428,18 +421,16 @@ class _AccountActionGrid extends StatelessWidget {
   const _AccountActionGrid({
     required this.onBookings,
     required this.onWallet,
-    required this.onAmc,
-    required this.onReviews,
     required this.onOffers,
     required this.onRefer,
+    required this.onHelp,
   });
 
   final VoidCallback onBookings;
   final VoidCallback onWallet;
-  final VoidCallback onAmc;
-  final VoidCallback onReviews;
   final VoidCallback onOffers;
   final VoidCallback onRefer;
+  final VoidCallback onHelp;
 
   @override
   Widget build(BuildContext context) {
@@ -465,18 +456,6 @@ class _AccountActionGrid extends StatelessWidget {
           onTap: onWallet,
         ),
         _AccountActionCard(
-          icon: Icons.shield_rounded,
-          title: 'AMC plans',
-          subtitle: 'Maintenance cover',
-          onTap: onAmc,
-        ),
-        _AccountActionCard(
-          icon: Icons.star_rounded,
-          title: 'Rate services',
-          subtitle: 'Share feedback',
-          onTap: onReviews,
-        ),
-        _AccountActionCard(
           icon: Icons.local_offer_rounded,
           title: 'Offers & coupons',
           subtitle: 'Grab the deals',
@@ -487,6 +466,12 @@ class _AccountActionGrid extends StatelessWidget {
           title: 'Refer & earn',
           subtitle: 'Earn rewards',
           onTap: onRefer,
+        ),
+        _AccountActionCard(
+          icon: Icons.support_agent_rounded,
+          title: 'Help & disputes',
+          subtitle: 'Talk to support',
+          onTap: onHelp,
         ),
       ],
     );

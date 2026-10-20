@@ -47,6 +47,8 @@ class ApiBooking {
     this.totalAmount,
     this.paymentStatus,
     this.paymentMode,
+    this.customerRating,
+    this.customerRatingComment,
     this.raw = const {},
   });
 
@@ -62,6 +64,11 @@ class ApiBooking {
   final num? totalAmount;
   final String? paymentStatus;
   final String? paymentMode;
+
+  /// The customer's current vendor rating, when the booking response
+  /// includes `ratings.byCustomer`.
+  final int? customerRating;
+  final String? customerRatingComment;
   final Map<String, dynamic> raw;
 
   bool get isActive =>
@@ -112,6 +119,12 @@ class ApiBooking {
       paymentMode:
           json['paymentMode']?.toString() ??
           _stringFromMap(json['payment'], 'mode'),
+      customerRating: _ratingFromMap(json['ratings'], 'byCustomer'),
+      customerRatingComment: _stringFromNestedMap(
+        json['ratings'],
+        'byCustomer',
+        'comment',
+      ),
       raw: json,
     );
   }
@@ -133,6 +146,19 @@ class ApiBooking {
   static String? _stringFromMap(dynamic value, String key) {
     final raw = _valueFromMap(value, key);
     return raw?.toString();
+  }
+
+  static int? _ratingFromMap(dynamic value, String key) {
+    final rating = _valueFromMap(value, key);
+    if (rating is! Map<String, dynamic>) return null;
+    final rawRating = rating['rating'];
+    if (rawRating is num) return rawRating.toInt();
+    return int.tryParse(rawRating?.toString() ?? '');
+  }
+
+  static String? _stringFromNestedMap(dynamic value, String key, String field) {
+    final nested = _valueFromMap(value, key);
+    return _stringFromMap(nested, field);
   }
 
   static num? _parseNumber(dynamic value) {

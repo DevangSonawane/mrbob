@@ -122,6 +122,8 @@ class _InvoicePageState extends State<InvoicePage> {
               label: Text(_isDownloading ? 'Downloading…' : 'Download PDF'),
               style: FilledButton.styleFrom(
                 backgroundColor: _navy,
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white70,
                 minimumSize: const Size.fromHeight(54),
               ),
             ),

@@ -6,9 +6,10 @@ import '../../../../core/models/booking.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class BookingCard extends StatelessWidget {
-  const BookingCard({super.key, required this.booking});
+  const BookingCard({super.key, required this.booking, this.onRate});
 
   final Booking booking;
+  final VoidCallback? onRate;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +73,35 @@ class BookingCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   _StatusLabel(status: booking.status),
+                  if (booking.status == BookingStatus.completed &&
+                      onRate != null) ...[
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: onRate,
+                      icon: Icon(
+                        LucideIcons.star,
+                        size: 14,
+                        color: booking.customerRating == null
+                            ? AppColors.brandForest
+                            : AppColors.brandGold,
+                      ),
+                      label: Text(
+                        booking.customerRating == null
+                            ? 'Rate vendor'
+                            : 'Rated ${booking.customerRating}/5',
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.brandForest,
+                        minimumSize: const Size(0, 28),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

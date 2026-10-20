@@ -68,6 +68,34 @@ class BookingService {
     return ApiBooking.fromJson(data);
   }
 
+  /// `POST /customer/bookings/{id}/rating` — rate (or update the rating
+  /// of) the vendor for a completed booking.
+  ///
+  /// The API accepts ratings from 1 through 5 only. A non-completed booking
+  /// is rejected by the server with 409; its `actions.canRate` flag indicates
+  /// whether the action is currently available.
+  Future<ApiBooking> rateVendor({
+    required String bookingId,
+    required int rating,
+    String? comment,
+  }) async {
+    if (rating < 1 || rating > 5) {
+      throw ArgumentError.value(rating, 'rating', 'Must be between 1 and 5');
+    }
+    final data = await _api.post(
+      '/customer/bookings/$bookingId/rating',
+      body: {
+        'rating': rating,
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
+      },
+    );
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('Unexpected booking response');
+    }
+    return ApiBooking.fromJson(data);
+  }
+
   /// `PATCH /bookings/{id}/status` — transition a booking's
   /// status. Customers typically cancel (CANCELLED); completion
   /// is normally driven by the professional.

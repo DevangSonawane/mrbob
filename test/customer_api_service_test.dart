@@ -146,6 +146,59 @@ void main() {
     );
     expect(booking.id, 'booking-1');
   });
+
+  test('BookingService rates a completed booking vendor', () async {
+    http.Request? captured;
+    final service = BookingService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          captured = request;
+          return _jsonResponse({
+            'success': true,
+            'data': {
+              'id': 'booking-1',
+              'status': 'COMPLETED',
+              'ratings': {
+                'byCustomer': {
+                  'rating': 5,
+                  'comment': 'Very professional and on time',
+                },
+              },
+            },
+          });
+        }),
+      ),
+    );
+
+    final booking = await service.rateVendor(
+      bookingId: 'booking-1',
+      rating: 5,
+      comment: '  Very professional and on time  ',
+    );
+
+    expect(captured?.method, 'POST');
+    expect(
+      captured?.url.toString(),
+      '${ApiConfig.effectiveBaseUrl}/customer/bookings/booking-1/rating',
+    );
+    expect(jsonDecode(captured!.body), {
+      'rating': 5,
+      'comment': 'Very professional and on time',
+    });
+    expect(booking.customerRating, 5);
+    expect(booking.customerRatingComment, 'Very professional and on time');
+  });
+
+  test('BookingService rejects ratings outside one to five', () async {
+    final service = BookingService(
+      api: ApiClient(client: MockClient((_) async => _jsonResponse({}))),
+    );
+
+    await expectLater(
+      service.rateVendor(bookingId: 'booking-1', rating: 0),
+      throwsArgumentError,
+    );
+  });
 }
 
 http.Response _jsonResponse(Map<String, dynamic> body, {int status = 200}) {

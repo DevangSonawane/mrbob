@@ -12,7 +12,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 
 /// Customer reviews: rate a completed booking
-/// (`POST /reviews`) and browse a professional's
+/// (`POST /customer/bookings/{id}/rating`) and browse a professional's
 /// reviews (`GET /reviews/professional/{id}`).
 class ReviewsPage extends StatefulWidget {
   const ReviewsPage({super.key});
@@ -71,8 +71,8 @@ class _ReviewsPageState extends State<ReviewsPage> {
     }
   }
 
-  /// `POST /reviews` — submit a rating for a
-  /// completed booking.
+  /// `POST /customer/bookings/{id}/rating` — submit or update the rating
+  /// for a completed booking.
   Future<void> _submitReview() async {
     final booking = _selectedBooking;
     if (booking == null || booking.id.isEmpty) {
@@ -86,7 +86,7 @@ class _ReviewsPageState extends State<ReviewsPage> {
 
     setState(() => _isSubmitting = true);
     try {
-      await ReviewService.instance.create(
+      await BookingService.instance.rateVendor(
         bookingId: booking.id,
         rating: _rating,
         comment: _commentController.text.trim(),
@@ -116,8 +116,9 @@ class _ReviewsPageState extends State<ReviewsPage> {
       _professionalReviews = const [];
     });
     try {
-      final reviews =
-          await ReviewService.instance.listForProfessional(professionalId);
+      final reviews = await ReviewService.instance.listForProfessional(
+        professionalId,
+      );
       if (!mounted) return;
       setState(() {
         _professionalReviews = reviews;
@@ -134,9 +135,9 @@ class _ReviewsPageState extends State<ReviewsPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -289,23 +290,23 @@ class _RateCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final booking in completed)
-                  ChoiceChip(
-                    label: Text(
-                      booking.service.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    selected: selected?.id == booking.id,
-                    onSelected: (_) => onSelect(booking),
-                    showCheckmark: false,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final booking in completed)
+                ChoiceChip(
+                  label: Text(
+                    booking.service.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-              ],
-            ),
+                  selected: selected?.id == booking.id,
+                  onSelected: (_) => onSelect(booking),
+                  showCheckmark: false,
+                ),
+            ],
+          ),
           const SizedBox(height: 16),
           const Text(
             'Your rating',
@@ -325,9 +326,7 @@ class _RateCard extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Icon(
-                      star <= rating
-                          ? LucideIcons.star
-                          : LucideIcons.star,
+                      star <= rating ? LucideIcons.star : LucideIcons.star,
                       size: 34,
                       color: star <= rating
                           ? AppColors.brandGold
@@ -360,8 +359,10 @@ class _RateCard extends StatelessWidget {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppColors.brandForest, width: 1.4),
+                borderSide: const BorderSide(
+                  color: AppColors.brandForest,
+                  width: 1.4,
+                ),
               ),
             ),
           ),
@@ -471,13 +472,15 @@ class _ProfessionalReviewsCardState extends State<_ProfessionalReviewsCard> {
                     fillColor: const Color(0xFFFAFAF7),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.borderSubtle),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderSubtle,
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.borderSubtle),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderSubtle,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -506,10 +509,7 @@ class _ProfessionalReviewsCardState extends State<_ProfessionalReviewsCard> {
                   ),
                   child: const Text(
                     'View',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                 ),
               ),
@@ -520,9 +520,7 @@ class _ProfessionalReviewsCardState extends State<_ProfessionalReviewsCard> {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.brandForest,
-                ),
+                child: CircularProgressIndicator(color: AppColors.brandForest),
               ),
             )
           else if (widget.reviews.isEmpty)
@@ -631,7 +629,12 @@ class _ReviewTile extends StatelessWidget {
 }
 
 class _MessageBlock extends StatelessWidget {
-  const _MessageBlock({required this.icon, required this.text, this.actionLabel, this.onAction});
+  const _MessageBlock({
+    required this.icon,
+    required this.text,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final IconData icon;
   final String text;

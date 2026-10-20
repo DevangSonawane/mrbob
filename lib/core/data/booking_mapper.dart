@@ -39,6 +39,8 @@ Booking mapApiBooking(ApiBooking api) {
     total: api.totalAmount?.toInt() ?? service.price,
     status: _mapStatus(api.status),
     hasPaymentDetails: api.hasPaymentDetails,
+    customerRating: api.customerRating,
+    customerRatingComment: api.customerRatingComment,
   );
 }
 

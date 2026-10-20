@@ -38,6 +38,8 @@ class Booking {
     required this.total,
     this.status = BookingStatus.confirmed,
     this.hasPaymentDetails = true,
+    this.customerRating,
+    this.customerRatingComment,
   });
 
   /// Backend booking id (`POST /bookings` response). Empty for
@@ -53,6 +55,10 @@ class Booking {
   /// Whether the bookings API actually supplied a payment object/status.
   /// The display label alone is not proof that payment details are available.
   final bool hasPaymentDetails;
+
+  /// The rating the customer has already left for the vendor, if any.
+  final int? customerRating;
+  final String? customerRatingComment;
 
   bool get paysOnDelivery => payment == 'Pay on delivery';
 }

@@ -13,6 +13,7 @@ import '../../../invoices/presentation/pages/invoice_page.dart';
 
 const _pinkBg = Color(0xFFF9ECEC);
 const _successBg = Color(0xFFE8F5E9);
+const _progressBg = Color(0xFFFFF7E5);
 const _sealRed = Color(0xFFCE2E30);
 const _sealGreen = Color(0xFF1F9D55);
 const _ink = Color(0xFF212121);
@@ -20,9 +21,7 @@ const _pink = Color(0xFFEC407A);
 const _pinkSoft = Color(0xFFFCE7F1);
 const _greyText = Color(0xFF8A8A8A);
 
-/// Booking detail, matching the payment-failed reference screen exactly:
-/// pink header zone with back button, red scalloped seal + title, and a
-/// white sheet with the refund note, slot/address card and action rows.
+/// Booking detail with a status-appropriate header and service actions.
 class BookingDetailPage extends StatefulWidget {
   const BookingDetailPage({super.key, required this.booking, this.onChanged});
 
@@ -42,8 +41,11 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   @override
   Widget build(BuildContext context) {
     final booking = widget.booking;
-    final isCompleted = booking.status == BookingStatus.completed;
-    final headerBackground = isCompleted ? _successBg : _pinkBg;
+    final headerBackground = switch (booking.status) {
+      BookingStatus.completed => _successBg,
+      BookingStatus.cancelled => _pinkBg,
+      BookingStatus.confirmed || BookingStatus.inService => _progressBg,
+    };
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       backgroundColor: headerBackground,
@@ -77,7 +79,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 width: 104,
                 height: 104,
                 child: CustomPaint(
-                  painter: _SealPainter(isSuccess: isCompleted),
+                  painter: _SealPainter(status: booking.status),
                 ),
               ),
               const SizedBox(height: 16),
@@ -115,43 +117,45 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _DetailCard(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 44,
-                              decoration: const BoxDecoration(
-                                color: _pinkSoft,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                LucideIcons.hourglass,
-                                color: _pink,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'In case any amount was deducted for this '
-                                'booking, any deducted amount will be '
-                                'refunded back to your original payment '
-                                'source',
-                                style: TextStyle(
-                                  color: _ink,
-                                  fontSize: 13.5,
-                                  height: 1.38,
-                                  fontWeight: FontWeight.w500,
-                                  decoration: TextDecoration.none,
+                      if (booking.status == BookingStatus.cancelled) ...[
+                        _DetailCard(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 56,
+                                height: 44,
+                                decoration: const BoxDecoration(
+                                  color: _pinkSoft,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  LucideIcons.hourglass,
+                                  color: _pink,
+                                  size: 22,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'In case any amount was deducted for this '
+                                  'booking, any deducted amount will be '
+                                  'refunded back to your original payment '
+                                  'source',
+                                  style: TextStyle(
+                                    color: _ink,
+                                    fontSize: 13.5,
+                                    height: 1.38,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                       _DetailCard(
                         child: Column(
                           children: [
@@ -511,11 +515,11 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-/// Scalloped status seal: a green tick for completed service, red X otherwise.
+/// Scalloped status seal: tick for completed, X for cancelled, clock in progress.
 class _SealPainter extends CustomPainter {
-  const _SealPainter({required this.isSuccess});
+  const _SealPainter({required this.status});
 
-  final bool isSuccess;
+  final BookingStatus status;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -537,13 +541,23 @@ class _SealPainter extends CustomPainter {
       }
     }
     path.close();
-    canvas.drawPath(path, Paint()..color = isSuccess ? _sealGreen : _sealRed);
+    final isCompleted = status == BookingStatus.completed;
+    final isCancelled = status == BookingStatus.cancelled;
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = isCompleted
+            ? _sealGreen
+            : isCancelled
+            ? _sealRed
+            : const Color(0xFFD49418),
+    );
 
     final markPaint = Paint()
       ..color = Colors.white
       ..strokeWidth = base * 0.12
       ..strokeCap = StrokeCap.round;
-    if (isSuccess) {
+    if (isCompleted) {
       canvas.drawLine(
         center + Offset(-base * .28, 0),
         center + Offset(-base * .06, base * .22),
@@ -554,7 +568,7 @@ class _SealPainter extends CustomPainter {
         center + Offset(base * .31, -base * .20),
         markPaint,
       );
-    } else {
+    } else if (isCancelled) {
       final arm = base * .24;
       canvas.drawLine(
         center + Offset(-arm, -arm),
@@ -566,10 +580,26 @@ class _SealPainter extends CustomPainter {
         center + Offset(arm, -arm),
         markPaint,
       );
+    } else {
+      canvas.drawCircle(
+        center,
+        base * .30,
+        markPaint..style = PaintingStyle.stroke,
+      );
+      canvas.drawLine(
+        center,
+        center + Offset(0, -base * .17),
+        markPaint..style = PaintingStyle.stroke,
+      );
+      canvas.drawLine(
+        center,
+        center + Offset(base * .13, base * .08),
+        markPaint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _SealPainter oldDelegate) =>
-      oldDelegate.isSuccess != isSuccess;
+      oldDelegate.status != status;
 }
