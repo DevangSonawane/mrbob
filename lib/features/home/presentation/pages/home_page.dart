@@ -2722,6 +2722,18 @@ class _SearchBarState extends State<_SearchBar> {
             controller: _menuController,
             menuAlignment: GlassMenuAlignment.topRight,
             autoAdjustToScreen: true,
+            // The overlay owns its premium layer, so the trigger can morph
+            // naturally into the menu instead of opening as a flat card.
+            quality: GlassQuality.premium,
+            settings: LiquidGlassSettings(
+              glassColor: Colors.white.withValues(alpha: 0.18),
+              blur: 12,
+              thickness: 24,
+              chromaticAberration: 0,
+              saturation: 1.12,
+              ambientRim: 0.18,
+              fresnelStrength: 1.16,
+            ),
             items: [
               // Header caption in the same ink as the item titles (instead
               // of the muted secondary caption) so the menu reads as one
@@ -2775,6 +2787,11 @@ class _SearchBarState extends State<_SearchBar> {
               icon: const Icon(Icons.tune_rounded, color: Colors.white),
               onPressed: _openFilterMenu,
               useOwnLayer: true,
+              quality: GlassQuality.premium,
+              settings: const LiquidGlassSettings(
+                chromaticAberration: 0,
+                ambientRim: 0.14,
+              ),
               size: 40,
               iconSize: 19,
               semanticLabel: 'Filter by booking mode',

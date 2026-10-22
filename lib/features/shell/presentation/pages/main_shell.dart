@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../../../core/data/booking_mapper.dart';
@@ -27,6 +28,8 @@ class _MainShellState extends State<MainShell> {
   int tab = 0;
   late List<Booking> bookings;
   bool _isLoadingBookings = true;
+  Offset? _navPointerDown;
+  bool _isNavDragging = false;
 
   @override
   void initState() {
@@ -107,39 +110,69 @@ class _MainShellState extends State<MainShell> {
     // GlassScaffold (SKILL.md §3, scaffold_nav_demo.dart) owns z-ordering so
     // the floating tab pill always paints above tab bodies, and extends the
     // body behind the bar — tab pages already reserve bottom padding for it.
-    return GlassScaffold(
-      backgroundColor: Colors.white,
-      extendBody: true,
-      body: screens[tab],
-      bottomBar: GlassTabBar.bottom(
-        selectedIndex: tab,
-        onTabSelected: _selectTab,
-        tabs: _tabs,
-        // Slim metrics: slightly smaller pill, tighter icon rhythm.
-        // Safe with icon-only tabs (no label text left to overflow).
-        barHeight: 58,
-        iconSize: 22,
-        spacing: 4,
-        horizontalPadding: 16,
-        verticalPadding: 16,
-        // Apple-style: light tint, real blur + saturation + edge light.
-        // Definition comes from refraction and the specular edge — not
-        // opacity — so the pill stays liquid over any page.
-        settings: LiquidGlassSettings(
-          glassColor: Colors.white.withValues(alpha: 0.32),
-          blur: 20,
-          thickness: 28,
-          saturation: 1.7,
-          lightIntensity: 0.7,
-          ambientStrength: 0.1,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Let the page continue through Android's gesture area. This avoids the
+      // opaque, platform-coloured strip that otherwise appears below the
+      // floating navigation pill.
+      value: SystemUiOverlayStyle.dark.copyWith(
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      ),
+      child: GlassScaffold(
+        backgroundColor: Colors.white,
+        extendBody: true,
+        // Keep the system-style edge treatment tight to the pill: it protects
+        // icon legibility without turning the bottom of the page into a slab.
+        bottomEdgeFade: true,
+        bottomEdgeFadeExtent: -12,
+        body: screens[tab],
+        bottomBar: GlassAdaptiveScope(
+          // This is the app's one persistent navigation surface. Give it the
+          // full shader renderer so its highlight, edge light and press state
+          // behave as a single liquid layer, while the rest of the app stays
+          // on the lighter adaptive standard tier.
+          minQuality: GlassQuality.premium,
+          maxQuality: GlassQuality.premium,
+          initialQuality: GlassQuality.premium,
+          allowStepUp: false,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (event) => _navPointerDown = event.position,
+            onPointerMove: _updateNavDrag,
+            onPointerUp: _endNavDrag,
+            onPointerCancel: _endNavDrag,
+            child: GlassTabBar.bottom(
+              selectedIndex: tab,
+              onTabSelected: _selectTab,
+              tabs: _tabs,
+              // Keep this as one detached, rounded glass "dialog" at the bottom
+              // rather than a conventional full-width navigation strip.
+              barHeight: 62,
+              barBorderRadius: 32,
+              iconSize: 22,
+              spacing: 6,
+              horizontalPadding: 18,
+              verticalPadding: 18,
+              quality: GlassQuality.premium,
+              backgroundQuality: GlassQuality.premium,
+              // Keep the resting glass neutral. A small prismatic edge appears
+              // only once the user actively drags across the navigation pill.
+              settings: LiquidGlassSettings(
+                chromaticAberration: _isNavDragging ? 0.12 : 0,
+              ),
+              selectedIconColor: AppColors.brandForest,
+              unselectedIconColor: AppColors.mutedText,
+              showIndicator: true,
+              // Use the package's calibrated regular material instead of a
+              // custom white-card recipe. This preserves adaptive light, blur
+              // and fluid morphing as one navigation layer.
+              indicatorColor: AppColors.brandForest.withValues(alpha: 0.10),
+            ),
+          ),
         ),
-        selectedIconColor: AppColors.brandForest,
-        unselectedIconColor: AppColors.mutedText,
-        showIndicator: true,
-        // Forest-tinted pill: the default indicator washes out over our
-        // white pages, which is why the selection circle kept disappearing.
-        indicatorColor: AppColors.brandForest.withValues(alpha: 0.18),
-        interactionGlowColor: Colors.transparent,
       ),
     );
   }
@@ -152,6 +185,19 @@ class _MainShellState extends State<MainShell> {
     // the tab bar's own spring animation.
     AppHaptics.press();
     setState(() => tab = value);
+  }
+
+  void _updateNavDrag(PointerMoveEvent event) {
+    final start = _navPointerDown;
+    if (start == null || _isNavDragging) return;
+    if ((event.position - start).distance < 6) return;
+    setState(() => _isNavDragging = true);
+  }
+
+  void _endNavDrag(PointerEvent _) {
+    _navPointerDown = null;
+    if (!_isNavDragging) return;
+    setState(() => _isNavDragging = false);
   }
 
   void _addBooking(Booking _) {
