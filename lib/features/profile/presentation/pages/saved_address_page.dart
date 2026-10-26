@@ -52,9 +52,7 @@ class _SavedAddressPageState extends State<SavedAddressPage> {
   Future<void> _openForm([CustomerAddress? address]) async {
     final saved = await Navigator.push<CustomerAddress>(
       context,
-      MaterialPageRoute(
-        builder: (_) => AddressFormPage(address: address),
-      ),
+      MaterialPageRoute(builder: (_) => AddressFormPage(address: address)),
     );
     if (saved != null) {
       await _load();
@@ -182,9 +180,7 @@ class _SavedAddressPageState extends State<SavedAddressPage> {
         return _AddressCard(
           address: address,
           onTap: () => _openForm(address),
-          onSetDefault: address.isDefault
-              ? null
-              : () => _setDefault(address),
+          onSetDefault: address.isDefault ? null : () => _setDefault(address),
           onDelete: () => _delete(address),
         );
       },
@@ -237,11 +233,7 @@ class _AddressCard extends StatelessWidget {
                   color: AppColors.brandForest.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(
-                  _icon,
-                  color: AppColors.brandForest,
-                  size: 18,
-                ),
+                child: Icon(_icon, color: AppColors.brandForest, size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -500,10 +492,7 @@ class _AddressFormPageState extends State<AddressFormPage> {
     setState(() => _saving = true);
     try {
       final address = widget.address;
-      final phone = _phoneController.text.replaceAll(
-        RegExp(r'[^0-9+]'),
-        '',
-      );
+      final phone = _phoneController.text.replaceAll(RegExp(r'[^0-9+]'), '');
       final saved = address == null
           ? await AddressService.instance.create(
               line1: line1,
@@ -564,9 +553,7 @@ class _AddressFormPageState extends State<AddressFormPage> {
             children: [
               for (final label in const ['HOME', 'WORK', 'OTHER'])
                 ChoiceChip(
-                  label: Text(
-                    label == 'OTHER' ? 'Other' : _titleCase(label),
-                  ),
+                  label: Text(label == 'OTHER' ? 'Other' : _titleCase(label)),
                   selected: _label == label,
                   showCheckmark: false,
                   onSelected: (_) {
@@ -788,10 +775,7 @@ class _TextField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-      ),
+      decoration: InputDecoration(labelText: label, hintText: hint),
     );
   }
 }

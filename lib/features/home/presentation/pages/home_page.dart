@@ -26,7 +26,7 @@ import '../../../../core/utils/app_haptics.dart';
 import '../../../booking/presentation/widgets/vendors_nearby_card.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 
-const _homeHeaderColor = Color(0xFF02462E);
+const _homeHeaderColor = Color(0xFF035864);
 
 String? _categoryAssetPathForTitle(String title) {
   final normalized = title
@@ -2784,7 +2784,10 @@ class _SearchBarState extends State<_SearchBar> {
               ),
             ],
             triggerBuilder: (context, _) => GlassIconButton(
-              icon: const Icon(Icons.tune_rounded, color: Colors.white),
+              icon: const Icon(
+                Icons.tune_rounded,
+                color: Colors.white,
+              ),
               onPressed: _openFilterMenu,
               useOwnLayer: true,
               quality: GlassQuality.premium,
