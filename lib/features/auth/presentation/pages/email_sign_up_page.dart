@@ -45,7 +45,8 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
   /// (city + profile) before entering the app.
   Future<void> _enterApp() async {
     final name =
-        '${firstNameController.text.trim()} ${lastNameController.text.trim()}'.trim();
+        '${firstNameController.text.trim()} ${lastNameController.text.trim()}'
+            .trim();
     final email = emailController.text.trim();
     final password = passwordController.text;
     final confirm = confirmPasswordController.text;
@@ -78,9 +79,7 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
       AppHaptics.success();
       if (!mounted) return;
 
-      final onboarded =
-          session.user.isOnboarded ||
-          await _fetchOnboarded();
+      final onboarded = session.user.isOnboarded || await _fetchOnboarded();
       if (!mounted) return;
 
       if (onboarded) {
@@ -89,10 +88,8 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => CustomerOnboardingPage(
-              name: name,
-              phone: session.user.phone,
-            ),
+            builder: (_) =>
+                CustomerOnboardingPage(name: name, phone: session.user.phone),
           ),
         );
       }
@@ -125,9 +122,9 @@ class _EmailSignUpPageState extends State<EmailSignUpPage> {
 
   void _showError(String message) {
     AppHaptics.press();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

@@ -516,9 +516,7 @@ class _VoiceBeamState extends State<VoiceBeam>
           widget.child,
           Positioned.fill(
             child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(painter: _painter),
-              ),
+              child: RepaintBoundary(child: CustomPaint(painter: _painter)),
             ),
           ),
         ],
@@ -751,7 +749,7 @@ class _VoiceBeamPainter extends CustomPainter {
       return (1 - d) * (1 - d);
     }
 
-void drawLobes({
+    void drawLobes({
       required double ew,
       required double eh,
       required double alpha,
@@ -804,8 +802,10 @@ void drawLobes({
     // Band: bell on the bend ceiling + tail hooks + chromatic fringes.
     final band = palette.band;
     final bendA = g.bend > 0 ? (lift / (g.bend * sc)).clamp(0.0, 1.0) : 0;
-    final bandAlpha =
-        (1.55 * bendA * (0.25 + eff * 0.75) * strength).clamp(0.0, 1.0);
+    final bandAlpha = (1.55 * bendA * (0.25 + eff * 0.75) * strength).clamp(
+      0.0,
+      1.0,
+    );
     if (bandAlpha > 0.02) {
       final spreadPx = size.width * 0.30 * (0.8 + eff * 0.4);
       // Ceiling the band sits on, capped at 82% of height; base sits 27px
@@ -817,8 +817,10 @@ void drawLobes({
       const steps = 48;
       for (var s = 0; s <= steps; s++) {
         final x = size.width * s / steps;
-        final t = ((x - (cx + cxOff * w * sc)) / math.max(1, spreadPx))
-            .clamp(-1.0, 1.0);
+        final t = ((x - (cx + cxOff * w * sc)) / math.max(1, spreadPx)).clamp(
+          -1.0,
+          1.0,
+        );
         // Normalised bell, skew 0.12.
         double bell(double tt) {
           final side = tt < 0 ? 0.88 : 1.12;
@@ -832,8 +834,10 @@ void drawLobes({
         final dist = (x - cx).abs();
         var tail = 0.0;
         if (dist > edge * 0.67) {
-          final uu =
-              ((dist - edge * 0.67) / math.max(1, edge * 0.33)).clamp(0.0, 1.0);
+          final uu = ((dist - edge * 0.67) / math.max(1, edge * 0.33)).clamp(
+            0.0,
+            1.0,
+          );
           tail = 0.59 * math.pow(uu, 2.4) * (1 - morph);
         }
         pts.add(Offset(x, base - apex * bell(t) - lift * 0.4 * tail));
@@ -892,16 +896,20 @@ void drawLobes({
       Offset(coreX, baseY - 2 * sc),
       coreR,
       Paint()
-        ..shader = RadialGradient(
-          colors: [
-            hotspot.withValues(alpha: 0.35 * bandAlpha + 0.1),
-            hotspot.withValues(alpha: 0.35 * bandAlpha + 0.1),
-            hotspot.withValues(alpha: 0),
-          ],
-          stops: const [0.0, 0.35, 1.0],
-        ).createShader(
-          Rect.fromCircle(center: Offset(coreX, baseY - 2 * sc), radius: coreR),
-        ),
+        ..shader =
+            RadialGradient(
+              colors: [
+                hotspot.withValues(alpha: 0.35 * bandAlpha + 0.1),
+                hotspot.withValues(alpha: 0.35 * bandAlpha + 0.1),
+                hotspot.withValues(alpha: 0),
+              ],
+              stops: const [0.0, 0.35, 1.0],
+            ).createShader(
+              Rect.fromCircle(
+                center: Offset(coreX, baseY - 2 * sc),
+                radius: coreR,
+              ),
+            ),
     );
 
     // Edge stroke with palette + bright centre, fading with the glow.

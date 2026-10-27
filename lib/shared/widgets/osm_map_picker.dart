@@ -195,9 +195,7 @@ class _OsmMapPickerState extends State<OsmMapPicker> {
           );
           // The pin carries the geographic centre, so the tiles are
           // anchored on the pin position and not on the viewport.
-          final pinOffset = widget.pinAlignment.alongSize(
-            constraints.biggest,
-          );
+          final pinOffset = widget.pinAlignment.alongSize(constraints.biggest);
           final offsetX =
               constraints.maxWidth / 2 +
               pinOffset.dx -

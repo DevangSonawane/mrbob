@@ -29,7 +29,9 @@ void main() {
     );
   }
 
-  testWidgets('shows the nearby count and the arrival estimate', (tester) async {
+  testWidgets('shows the nearby count and the arrival estimate', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       wrap(
         VendorsNearbyCard(
@@ -50,7 +52,9 @@ void main() {
     expect(find.text('About 12 min · 800 m away'), findsOneWidget);
   });
 
-  testWidgets('says the vendors are busy when nobody is around', (tester) async {
+  testWidgets('says the vendors are busy when nobody is around', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       wrap(
         VendorsNearbyCard(

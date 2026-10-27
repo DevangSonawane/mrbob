@@ -88,8 +88,8 @@ class _VendorsNearbyCardState extends State<VendorsNearbyCard> {
     }
 
     try {
-      final nearby = await (widget.nearbyService ?? NearbyVendorsService.instance)
-          .nearby(
+      final nearby =
+          await (widget.nearbyService ?? NearbyVendorsService.instance).nearby(
             latitude: point.latitude,
             longitude: point.longitude,
             categoryId: widget.categoryId,
@@ -225,10 +225,7 @@ class _VendorsNearbyCardState extends State<VendorsNearbyCard> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  [
-                    if (eta != null) 'About $eta',
-                    ?distance,
-                  ].join(' · '),
+                  [if (eta != null) 'About $eta', ?distance].join(' · '),
                   style: _subtitleStyle,
                 ),
               ],

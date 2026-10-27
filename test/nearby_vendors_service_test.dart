@@ -9,66 +9,69 @@ import 'package:mrbob/core/services/api_config.dart';
 import 'package:mrbob/core/services/nearby_vendors_service.dart';
 
 void main() {
-  test('nearby vendors queries the customer endpoint with the position', () async {
-    http.Request? captured;
-    final service = NearbyVendorsService(
-      api: ApiClient(
-        client: MockClient((request) async {
-          captured = request;
-          return _jsonResponse({
-            'success': true,
-            'data': {
-              'vendorsNearby': 6,
-              'nearestKm': 0.8,
-              'etaMinutes': 12,
-              'radiusKm': 5,
-              'areas': [
-                {
-                  'cell': '87608b0b1ffffff',
-                  'center': [19.061, 72.832],
-                  'boundary': [
-                    [19.07, 72.82],
-                    [19.05, 72.84],
-                  ],
-                  'vendors': 4,
-                },
-              ],
-            },
-          });
-        }),
-      ),
-    );
+  test(
+    'nearby vendors queries the customer endpoint with the position',
+    () async {
+      http.Request? captured;
+      final service = NearbyVendorsService(
+        api: ApiClient(
+          client: MockClient((request) async {
+            captured = request;
+            return _jsonResponse({
+              'success': true,
+              'data': {
+                'vendorsNearby': 6,
+                'nearestKm': 0.8,
+                'etaMinutes': 12,
+                'radiusKm': 5,
+                'areas': [
+                  {
+                    'cell': '87608b0b1ffffff',
+                    'center': [19.061, 72.832],
+                    'boundary': [
+                      [19.07, 72.82],
+                      [19.05, 72.84],
+                    ],
+                    'vendors': 4,
+                  },
+                ],
+              },
+            });
+          }),
+        ),
+      );
 
-    final nearby = await service.nearby(
-      latitude: 19.0622,
-      longitude: 72.8315,
-      categoryId: 'category-1',
-    );
+      final nearby = await service.nearby(
+        latitude: 19.0622,
+        longitude: 72.8315,
+        categoryId: 'category-1',
+      );
 
-    expect(captured?.method, 'GET');
-    final url = captured!.url;
-    expect(
-      '${url.origin}${url.path}',
-      '${ApiConfig.effectiveBaseUrl}/customer/nearby-vendors',
-    );
-    expect(url.queryParameters['latitude'], '19.0622');
-    expect(url.queryParameters['longitude'], '72.8315');
-    expect(url.queryParameters['categoryId'], 'category-1');
+      expect(captured?.method, 'GET');
+      final url = captured!.url;
+      expect(
+        '${url.origin}${url.path}',
+        '${ApiConfig.effectiveBaseUrl}/customer/nearby-vendors',
+      );
+      expect(url.queryParameters['latitude'], '19.0622');
+      expect(url.queryParameters['longitude'], '72.8315');
+      expect(url.queryParameters['categoryId'], 'category-1');
 
-    expect(nearby.vendorsNearby, 6);
-    expect(nearby.nearestKm, 0.8);
-    expect(nearby.etaMinutes, 12);
-    expect(nearby.radiusKm, 5);
-    expect(nearby.hasVendors, isTrue);
-    expect(nearby.etaLabel, '12 min');
-    expect(nearby.distanceLabel, '800 m away');
-    expect(nearby.areas, hasLength(1));
-    expect(nearby.areas.first.cell, '87608b0b1ffffff');
-    expect(nearby.areas.first.vendors, 4);
-    expect(nearby.areas.first.center?.latitude, 19.061);
-    expect(nearby.areas.first.center?.longitude, 72.832);
-    expect(nearby.areas.first.boundary, hasLength(2));
-  });
+      expect(nearby.vendorsNearby, 6);
+      expect(nearby.nearestKm, 0.8);
+      expect(nearby.etaMinutes, 12);
+      expect(nearby.radiusKm, 5);
+      expect(nearby.hasVendors, isTrue);
+      expect(nearby.etaLabel, '12 min');
+      expect(nearby.distanceLabel, '800 m away');
+      expect(nearby.areas, hasLength(1));
+      expect(nearby.areas.first.cell, '87608b0b1ffffff');
+      expect(nearby.areas.first.vendors, 4);
+      expect(nearby.areas.first.center?.latitude, 19.061);
+      expect(nearby.areas.first.center?.longitude, 72.832);
+      expect(nearby.areas.first.boundary, hasLength(2));
+    },
+  );
 
   test('nearby vendors omits the position when there is none', () async {
     http.Request? captured;
@@ -94,16 +97,19 @@ void main() {
     expect(nearby.distanceLabel, isNull);
   });
 
-  test('nearby vendors survives a response without the data envelope', () async {
-    final service = NearbyVendorsService(
-      api: ApiClient(client: MockClient((_) async => _jsonResponse({}))),
-    );
+  test(
+    'nearby vendors survives a response without the data envelope',
+    () async {
+      final service = NearbyVendorsService(
+        api: ApiClient(client: MockClient((_) async => _jsonResponse({}))),
+      );
 
-    final nearby = await service.nearby(latitude: 19.0, longitude: 72.8);
+      final nearby = await service.nearby(latitude: 19.0, longitude: 72.8);
 
-    expect(nearby.vendorsNearby, 0);
-    expect(nearby.areas, isEmpty);
-  });
+      expect(nearby.vendorsNearby, 0);
+      expect(nearby.areas, isEmpty);
+    },
+  );
 
   test('nearby vendors labels long arrival times in hours', () {
     const nearby = NearbyVendors(

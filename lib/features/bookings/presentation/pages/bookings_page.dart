@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/models/booking.dart';
@@ -7,8 +6,11 @@ import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../../shared/widgets/service_visuals.dart';
 import '../widgets/booking_card.dart';
 import 'booking_detail_page.dart';
+
+const _pageBg = Color(0xFFF6F5F1);
 
 class BookingsPage extends StatefulWidget {
   const BookingsPage({
@@ -53,61 +55,93 @@ class _BookingsPageState extends State<BookingsPage> {
     await widget.onChanged?.call();
   }
 
+  void _openDetail(Booking booking) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            BookingDetailPage(booking: booking, onChanged: widget.onChanged),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
+    final active = filtered.where((b) => b.status.isActive).toList();
+    final past = filtered.where((b) => !b.status.isActive).toList();
+    var index = 0;
+
+    Widget card(Booking booking) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: StaggerIn(
+        // Re-key per filter so switching segments replays the entrance.
+        key: ValueKey('$_filterIndex-${identityHashCode(booking)}'),
+        index: index++,
+        child: BookingCard(
+          booking: booking,
+          onTap: () => _openDetail(booking),
+          onRate:
+              booking.status == BookingStatus.completed && booking.id.isNotEmpty
+              ? (star) => _openRatingSheet(booking, star)
+              : null,
+        ),
+      ),
+    );
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _pageBg,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           color: AppColors.brandForest,
           onRefresh: _refreshBookings,
-          child: ListView(
+          child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
-            children: [
-              const _Header(),
-              const SizedBox(height: 18),
-              _GlassFilterBar(
-                filters: _filters,
-                selectedIndex: _filterIndex,
-                onSelected: (index) => setState(() => _filterIndex = index),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 6),
+                sliver: SliverToBoxAdapter(
+                  child: _Header(bookings: widget.bookings),
+                ),
               ),
-              const SizedBox(height: 20),
-              if (widget.isLoading)
-                const _BookingsLoadingState()
-              else if (filtered.isEmpty)
-                _EmptyState(onBrowse: widget.onBrowse)
-              else
-                Column(
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _FilterBarDelegate(
+                  filters: _filters,
+                  counts: [for (var i = 0; i < _filters.length; i++) _count(i)],
+                  selectedIndex: _filterIndex,
+                  onSelected: (index) {
+                    if (index == _filterIndex) return;
+                    AppHaptics.press();
+                    setState(() => _filterIndex = index);
+                  },
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 112),
+                sliver: SliverList.list(
                   children: [
-                    for (final booking in filtered) ...[
-                      GestureDetector(
-                        onTap: () {
-                          AppHaptics.press();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BookingDetailPage(
-                                booking: booking,
-                                onChanged: widget.onChanged,
-                              ),
-                            ),
-                          );
-                        },
-                        child: BookingCard(
-                          booking: booking,
-                          onRate: booking.status == BookingStatus.completed
-                              ? () => _openRatingSheet(booking)
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
+                    if (widget.isLoading)
+                      const _BookingsLoadingState()
+                    else if (filtered.isEmpty)
+                      _EmptyState(onBrowse: widget.onBrowse)
+                    else ...[
+                      if (active.isNotEmpty) ...[
+                        const CapsSectionHeader(title: 'Ongoing'),
+                        const SizedBox(height: 14),
+                        for (final booking in active) card(booking),
+                      ],
+                      if (past.isNotEmpty) ...[
+                        if (active.isNotEmpty) const SizedBox(height: 10),
+                        const CapsSectionHeader(title: 'Past bookings'),
+                        const SizedBox(height: 14),
+                        for (final booking in past) card(booking),
+                      ],
                     ],
                   ],
                 ),
+              ),
             ],
           ),
         ),
@@ -115,7 +149,15 @@ class _BookingsPageState extends State<BookingsPage> {
     );
   }
 
-  Future<void> _openRatingSheet(Booking booking) async {
+  int _count(int index) {
+    final saved = _filterIndex;
+    _filterIndex = index;
+    final n = _filtered.length;
+    _filterIndex = saved;
+    return n;
+  }
+
+  Future<void> _openRatingSheet(Booking booking, int initialRating) async {
     if (booking.id.isEmpty) return;
     final submitted = await showModalBottomSheet<bool>(
       context: context,
@@ -124,23 +166,25 @@ class _BookingsPageState extends State<BookingsPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _VendorRatingSheet(booking: booking),
+      builder: (_) =>
+          _VendorRatingSheet(booking: booking, initialRating: initialRating),
     );
     if (submitted == true) await widget.onChanged?.call();
   }
 }
 
 class _VendorRatingSheet extends StatefulWidget {
-  const _VendorRatingSheet({required this.booking});
+  const _VendorRatingSheet({required this.booking, this.initialRating});
 
   final Booking booking;
+  final int? initialRating;
 
   @override
   State<_VendorRatingSheet> createState() => _VendorRatingSheetState();
 }
 
 class _VendorRatingSheetState extends State<_VendorRatingSheet> {
-  late int _rating = widget.booking.customerRating ?? 0;
+  late int _rating = widget.initialRating ?? widget.booking.customerRating ?? 0;
   late final TextEditingController _comment = TextEditingController(
     text: widget.booking.customerRatingComment ?? '',
   );
@@ -266,71 +310,278 @@ class _BookingsLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 56),
-      child: Center(
-        child: SizedBox(
-          height: 26,
-          width: 26,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.6,
-            color: AppColors.brandForest,
-          ),
-        ),
+    return ShimmerBox(
+      child: Column(
+        children: [
+          for (var i = 0; i < 3; i++)
+            Container(
+              height: i == 0 ? 210 : 96,
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9F8F4),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBone(width: 54, height: 54, radius: 14),
+                  SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBone(width: 150, height: 13),
+                      SizedBox(height: 10),
+                      SkeletonBone(width: 100, height: 10),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
 class _Header extends StatelessWidget {
-  const _Header();
+  const _Header({required this.bookings});
+
+  final List<Booking> bookings;
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      'My bookings',
-      style: TextStyle(
-        color: AppColors.brandForest,
-        fontSize: 23,
-        fontWeight: FontWeight.w900,
-        letterSpacing: -0.4,
-      ),
+    final active = bookings.where((b) => b.status.isActive).length;
+    final done = bookings
+        .where((b) => b.status == BookingStatus.completed)
+        .length;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'My bookings',
+                style: TextStyle(
+                  color: AppColors.brandForest,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.6,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                bookings.isEmpty
+                    ? 'Your visits will show up here'
+                    : '$active ongoing · $done done',
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (active > 0)
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 5, 10, 5),
+            decoration: BoxDecoration(
+              color: AppColors.brandGold,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  LucideIcons.radio,
+                  size: 14,
+                  color: AppColors.brandForest,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  '$active live',
+                  style: const TextStyle(
+                    color: AppColors.brandForest,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
 
-class _GlassFilterBar extends StatelessWidget {
-  const _GlassFilterBar({
+class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
+  const _FilterBarDelegate({
     required this.filters,
+    required this.counts,
     required this.selectedIndex,
     required this.onSelected,
   });
 
   final List<String> filters;
+  final List<int> counts;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
+  static const _height = 60.0;
+
+  static const _icons = [
+    LucideIcons.layers,
+    LucideIcons.zap,
+    LucideIcons.calendarClock,
+    LucideIcons.circleCheck,
+  ];
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _pageBg,
+        boxShadow: overlapsContent || shrinkOffset > 0
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        itemCount: filters.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) => _FilterPill(
+          key: ValueKey('filter-${filters[i]}'),
+          label: filters[i],
+          icon: _icons[i % _icons.length],
+          count: counts[i],
+          selected: i == selectedIndex,
+          onTap: () => onSelected(i),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_FilterBarDelegate old) =>
+      old.selectedIndex != selectedIndex ||
+      old.counts.join() != counts.join() ||
+      old.onSelected != onSelected;
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    // Real segmented control (SKILL.md §4 substitution table): fluid glass
-    // indicator with jelly physics and built-in drag-to-select
-    // (SegmentDragBehavior.selectIndicator). Never wrapped in glass (Rule 2).
-    return GlassSegmentedControl(
-      segments: [for (final label in filters) GlassSegment(label: label)],
-      selectedIndex: selectedIndex,
-      onSegmentSelected: onSelected,
-      height: 42,
-      backgroundColor: AppColors.brandForest,
-      indicatorColor: AppColors.brandGold,
-      selectedTextStyle: const TextStyle(
-        color: Colors.white,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w800,
-      ),
-      unselectedTextStyle: const TextStyle(
-        color: Colors.white70,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w600,
+    final fg = selected ? Colors.white : AppColors.brandForest;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label, $count',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.fromLTRB(11, 0, 6, 0),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brandForest : Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? AppColors.brandForest : const Color(0xFFE6E2D6),
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.brandForest.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: ExcludeSemantics(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 15,
+                  color: selected && icon == LucideIcons.zap
+                      ? AppColors.brandGold
+                      : fg,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  constraints: const BoxConstraints(minWidth: 22),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppColors.brandGold
+                        : const Color(0xFFF1EFE8),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.brandForest,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -347,17 +598,53 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 44),
       child: Column(
         children: [
-          Container(
-            width: 76,
-            height: 76,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF0EDE4),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              LucideIcons.packageOpen,
-              color: Color(0xFF9BA09A),
-              size: 30,
+          SizedBox(
+            width: 120,
+            height: 104,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 104,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.brandGold.withValues(alpha: 0.16),
+                  ),
+                ),
+                Transform.rotate(
+                  angle: -0.12,
+                  child: Container(
+                    width: 64,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      LucideIcons.calendarPlus,
+                      color: Color(0xFF035864),
+                      size: 30,
+                    ),
+                  ),
+                ),
+                const Positioned(
+                  right: 6,
+                  top: 10,
+                  child: Icon(
+                    LucideIcons.sparkles,
+                    color: AppColors.brandGold,
+                    size: 22,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 18),

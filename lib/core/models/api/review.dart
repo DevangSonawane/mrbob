@@ -39,7 +39,8 @@ class Review {
       bookingId: json['bookingId']?.toString(),
       professionalId: json['professionalId']?.toString(),
       customerName:
-          json['customer']?['name']?.toString() ?? json['customerName']?.toString(),
+          json['customer']?['name']?.toString() ??
+          json['customerName']?.toString(),
       createdAt: createdAt,
     );
   }
@@ -48,10 +49,7 @@ class Review {
 /// Normalizes paginated-or-plain list responses for reviews.
 List<Review> parseReviewList(dynamic data) {
   final list = _extractList(data);
-  return list
-      .whereType<Map<String, dynamic>>()
-      .map(Review.fromJson)
-      .toList();
+  return list.whereType<Map<String, dynamic>>().map(Review.fromJson).toList();
 }
 
 List<dynamic> _extractList(dynamic data) {

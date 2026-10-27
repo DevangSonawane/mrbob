@@ -58,10 +58,12 @@ class _AmcPageState extends State<AmcPage> {
     return switch (_filterIndex) {
       1 => _subscriptions.where((s) => s.isActive).toList(),
       2 =>
-        _subscriptions.where((s) => s.status.toUpperCase() == 'EXPIRED')
+        _subscriptions
+            .where((s) => s.status.toUpperCase() == 'EXPIRED')
             .toList(),
       3 =>
-        _subscriptions.where((s) => s.status.toUpperCase() == 'CANCELLED')
+        _subscriptions
+            .where((s) => s.status.toUpperCase() == 'CANCELLED')
             .toList(),
       _ => _subscriptions,
     };
@@ -80,9 +82,9 @@ class _AmcPageState extends State<AmcPage> {
       _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _isSubscribing = false);
     }
@@ -124,9 +126,9 @@ class _AmcPageState extends State<AmcPage> {
       _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -215,7 +217,10 @@ class _Header extends StatelessWidget {
 }
 
 class _SubscribeCard extends StatelessWidget {
-  const _SubscribeCard({required this.isSubscribing, required this.onSubscribe});
+  const _SubscribeCard({
+    required this.isSubscribing,
+    required this.onSubscribe,
+  });
 
   final bool isSubscribing;
   final VoidCallback onSubscribe;
@@ -425,20 +430,14 @@ class _SubscriptionCard extends StatelessWidget {
               _StatusChip(status: subscription.status),
             ],
           ),
-          if (subscription.amount != null ||
-              subscription.endDate != null) ...[
+          if (subscription.amount != null || subscription.endDate != null) ...[
             const SizedBox(height: 12),
             const Divider(height: 1, color: AppColors.borderSubtle),
             const SizedBox(height: 10),
             Row(
               children: [
                 if (subscription.amount != null)
-                  Expanded(
-                    child: _meta(
-                      'Value',
-                      'Rs ${subscription.amount}',
-                    ),
-                  ),
+                  Expanded(child: _meta('Value', 'Rs ${subscription.amount}')),
                 if (subscription.endDate != null)
                   Expanded(
                     child: _meta(
@@ -551,7 +550,7 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(
               color: AppColors.mutedText,
               fontSize: 13,
-      height: 1.4,
+              height: 1.4,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -573,11 +572,7 @@ class _ErrorState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 30),
       child: Column(
         children: [
-          const Icon(
-            LucideIcons.wifiOff,
-            color: AppColors.mutedText,
-            size: 34,
-          ),
+          const Icon(LucideIcons.wifiOff, color: AppColors.mutedText, size: 34),
           const SizedBox(height: 12),
           Text(
             message,

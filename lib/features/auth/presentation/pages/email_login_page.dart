@@ -741,9 +741,7 @@ class _AddressStepState extends State<_AddressStep> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _locating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not read your location.')),
       );
     }
@@ -1139,7 +1137,6 @@ class _ConfirmLocationSheet extends StatelessWidget {
     );
   }
 }
-
 
 class _NextButton extends StatefulWidget {
   const _NextButton({

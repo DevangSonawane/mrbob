@@ -17,10 +17,7 @@ class CatalogService {
   Future<List<City>> getCities() async {
     final data = await _api.get('/zones/cities');
     final list = data is List ? data : const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(City.fromJson)
-        .toList();
+    return list.whereType<Map<String, dynamic>>().map(City.fromJson).toList();
   }
 
   /// `GET /zones` — list active zones, optionally filtered by city.
@@ -30,10 +27,7 @@ class CatalogService {
       query: cityId == null ? null : {'cityId': cityId},
     );
     final list = data is List ? data : const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(Zone.fromJson)
-        .toList();
+    return list.whereType<Map<String, dynamic>>().map(Zone.fromJson).toList();
   }
 
   /// `GET /categories` — list active service categories.

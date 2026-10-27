@@ -26,30 +26,12 @@ import '../../../../core/utils/app_haptics.dart';
 import '../../../amc/presentation/pages/amc_page.dart';
 import '../../../booking/presentation/widgets/vendors_nearby_card.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
+import 'all_services_page.dart';
 import '../widgets/home_hero_banners.dart';
+import '../../../../shared/widgets/service_visuals.dart';
+import '../widgets/home_service_sections.dart';
 
 const _homeHeaderColor = Color(0xFF035864);
-
-String? _categoryAssetPathForTitle(String title) {
-  final normalized = title
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '')
-      .replaceAll('repair', '')
-      .replaceAll('fixes', '')
-      .replaceAll('snags', '')
-      .replaceAll('servicing', '')
-      .replaceAll('service', '');
-
-  return switch (normalized) {
-    'plumber' || 'plumbing' => 'assets/service_cat/plumbing.png',
-    'electrician' || 'electrical' => 'assets/service_cat/electrician.png',
-    'painting' => 'assets/service_cat/painting.png',
-    'carpenter' || 'carpentry' => 'assets/service_cat/carpenting.png',
-    'deepinspection' || 'inspection' => 'assets/service_cat/inspection.png',
-    'ac' => 'assets/mrbob_onboarding/MrBob HVAC Ductwork Installation.png',
-    _ => null,
-  };
-}
 
 /// Blinkit-style home:
 /// - Solid green header that COLLAPSES on scroll.
@@ -211,7 +193,6 @@ class _HomePageState extends State<HomePage> {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final scale = (width / 430).clamp(0.78, 0.92);
     final horizontalInset = (22.0 * scale).clamp(18.0, 22.0).toDouble();
-    final popularHeight = 266.0 * scale;
 
     return Scaffold(
       backgroundColor: _homeHeaderColor,
@@ -264,84 +245,47 @@ class _HomePageState extends State<HomePage> {
                         Padding(
                           padding: EdgeInsets.fromLTRB(
                             horizontalInset,
-                            36 * scale,
+                            30 * scale,
                             horizontalInset,
-                            22 * scale,
+                            18 * scale,
                           ),
-                          child: _SectionHeader(
-                            title: 'Service Categories',
-                            onViewAll: () => _openAllCategories(context),
+                          child: const CapsSectionHeader(
+                            title: 'What needs fixing?',
                           ),
                         ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: horizontalInset,
-                          ),
-                          child: _isLoadingCategories
-                              ? _CategoriesLoading(scale: scale)
-                              : GridView.builder(
-                                  itemCount: _visibleServices.take(6).length,
-                                  shrinkWrap: true,
-                                  padding: EdgeInsets.zero,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  gridDelegate:
-                                      SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        mainAxisSpacing: 16 * scale,
-                                        crossAxisSpacing: 16 * scale,
-                                        childAspectRatio: 0.78,
-                                      ),
-                                  itemBuilder: (context, index) {
-                                    final service = _visibleServices[index];
-                                    return _CategoryTile(
-                                      service: service,
-                                      scale: scale,
-                                      onTap: () =>
-                                          _openService(context, service),
-                                    );
-                                  },
-                                ),
+                        HomeCategoryRail(
+                          services: _visibleServices,
+                          loading: _isLoadingCategories,
+                          scale: scale,
+                          horizontalInset: horizontalInset,
+                          onTap: (service) => _openService(context, service),
+                          onSeeAll: () => _openAllCategories(context),
+                          onRetry: () {
+                            setState(() => _isLoadingCategories = true);
+                            _loadCategories();
+                          },
                         ),
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            horizontalInset,
-                            38 * scale,
-                            horizontalInset,
-                            22 * scale,
-                          ),
-                          child: _SectionHeader(
-                            title: 'Popular Services',
-                            onViewAll: _visibleServices.isEmpty
-                                ? null
-                                : () => _openService(
-                                    context,
-                                    _visibleServices.first,
-                                  ),
-                          ),
-                        ),
-                        SizedBox(
-                          height: popularHeight,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
+                        if (_isLoadingCategories ||
+                            _visibleServices.isNotEmpty) ...[
+                          Padding(
                             padding: EdgeInsets.fromLTRB(
                               horizontalInset,
-                              2 * scale,
+                              30 * scale,
                               horizontalInset,
-                              12 * scale,
+                              16 * scale,
                             ),
-                            itemCount: _visibleServices.length,
-                            separatorBuilder: (_, _) =>
-                                SizedBox(width: 16 * scale),
-                            itemBuilder: (context, index) {
-                              final service = _visibleServices[index];
-                              return _PopularServiceCard(
-                                service: service,
-                                scale: scale,
-                                onTap: () => _openService(context, service),
-                              );
-                            },
+                            child: const CapsSectionHeader(
+                              title: 'Popular right now',
+                            ),
                           ),
-                        ),
+                          HomePopularRail(
+                            services: _visibleServices,
+                            loading: _isLoadingCategories,
+                            scale: scale,
+                            horizontalInset: horizontalInset,
+                            onTap: (service) => _openService(context, service),
+                          ),
+                        ],
                         SizedBox(height: 108 + bottomInset),
                       ],
                     ),
@@ -444,7 +388,7 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(
         settings: const RouteSettings(name: _allCategoriesRouteName),
-        builder: (_) => _AllServiceCategoriesPage(
+        builder: (_) => AllServicesPage(
           services: _services,
           onServiceSelected: _openService,
         ),
@@ -2344,166 +2288,6 @@ class _ServiceQuestionnairePageState extends State<_ServiceQuestionnairePage> {
   }
 }
 
-class _AllServiceCategoriesPage extends StatelessWidget {
-  const _AllServiceCategoriesPage({
-    required this.services,
-    required this.onServiceSelected,
-  });
-
-  final List<ServiceItem> services;
-  final Future<void> Function(BuildContext context, ServiceItem service)
-  onServiceSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final scale = (width / 430).clamp(0.78, 0.92);
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Service Categories'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.brandForest,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: GridView.builder(
-        padding: EdgeInsets.fromLTRB(
-          18 * scale,
-          18 * scale,
-          18 * scale,
-          28 * scale,
-        ),
-        itemCount: services.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: width > 560 ? 3 : 2,
-          mainAxisSpacing: 14 * scale,
-          crossAxisSpacing: 14 * scale,
-          childAspectRatio: 0.86,
-        ),
-        itemBuilder: (context, index) {
-          final service = services[index];
-          return _AllCategoryCard(
-            service: service,
-            scale: scale,
-            onTap: () => onServiceSelected(context, service),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _AllCategoryCard extends StatelessWidget {
-  const _AllCategoryCard({
-    required this.service,
-    required this.scale,
-    required this.onTap,
-  });
-
-  final ServiceItem service;
-  final double scale;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
-      elevation: 0,
-      child: InkWell(
-        onTap: () {
-          AppHaptics.press();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(15),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: AppColors.borderSubtle),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 18 * scale,
-                offset: Offset(0, 8 * scale),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(12 * scale),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  height: 76 * scale,
-                  decoration: BoxDecoration(
-                    color: service.color,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(
-                    service.icon,
-                    color: AppColors.brandForest,
-                    size: 36 * scale,
-                  ),
-                ),
-                SizedBox(height: 12 * scale),
-                Text(
-                  service.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.brandForest,
-                    fontSize: 14.5 * scale,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                    height: 1.15,
-                  ),
-                ),
-                SizedBox(height: 5 * scale),
-                Expanded(
-                  child: Text(
-                    service.subtitle,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.mutedText,
-                      fontSize: 11.5 * scale,
-                      height: 1.35,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8 * scale),
-                Row(
-                  children: [
-                    Text(
-                      'Rs ${service.price}',
-                      style: TextStyle(
-                        color: AppColors.brandForest,
-                        fontSize: 13 * scale,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      LucideIcons.chevronRight,
-                      color: AppColors.mutedText,
-                      size: 18 * scale,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Pinned Blinkit search bar delegate.
 /// Full-bleed EXTENDED gold bar (edge to edge, exactly like Blinkit's
 /// yellow header) so scrolling content slides under a solid bar instead
@@ -3106,500 +2890,4 @@ class _CircleAction extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.onViewAll});
-
-  final String title;
-  final VoidCallback? onViewAll;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.brandForest,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
-              height: 1.15,
-            ),
-          ),
-        ),
-        TextButton.icon(
-          onPressed: onViewAll,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.brandForest,
-            padding: EdgeInsets.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            minimumSize: Size.zero,
-          ),
-          iconAlignment: IconAlignment.end,
-          label: const Text(
-            'View all',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.1,
-            ),
-          ),
-          icon: const Icon(LucideIcons.chevronRight, size: 16),
-        ),
-      ],
-    );
-  }
-}
-
-class _CategoriesLoading extends StatelessWidget {
-  const _CategoriesLoading({required this.scale});
-
-  final double scale;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 212 * scale,
-      child: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: AppColors.brandForest,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({
-    required this.service,
-    required this.scale,
-    required this.onTap,
-  });
-
-  final ServiceItem service;
-  final double scale;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final assetPath = _categoryAssetPath(service);
-    final imageUrl = service.imageUrl;
-
-    return InkWell(
-      onTap: () {
-        AppHaptics.press();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(15),
-      child: Column(
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: service.color,
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: AppColors.borderSubtle),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 12 * scale,
-                    offset: Offset(0, 6 * scale),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: imageUrl != null
-                    ? Image.network(
-                        imageUrl,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      )
-                    : assetPath != null && !service.usesApiImage
-                    ? Image.asset(
-                        assetPath,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.cover,
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-          ),
-          SizedBox(height: 8 * scale),
-          Text(
-            _categoryTitle(service.title),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.brandForest,
-              fontSize: 14 * scale,
-              fontWeight: FontWeight.w400,
-              letterSpacing: -0.1,
-              height: 1.15,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _categoryTitle(String title) {
-    return switch (title) {
-      'Civil touch-ups' => 'Ceiling',
-      'Plumbing fixes' => 'Plumbing',
-      'Electrical snags' => 'Electrical',
-      'Painting repairs' => 'Painting',
-      'Carpentry fixes' => 'Carpentry',
-      'Deep inspection' => 'Inspection',
-      'AC servicing' => 'AC Service',
-      'Appliance repair' => 'Appliance',
-      _ => title,
-    };
-  }
-
-  String? _categoryAssetPath(ServiceItem service) {
-    return _categoryAssetPathForTitle(service.title);
-  }
-}
-
-class _PopularServiceCard extends StatelessWidget {
-  const _PopularServiceCard({
-    required this.service,
-    required this.scale,
-    required this.onTap,
-  });
-
-  final ServiceItem service;
-  final double scale;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final originalPrice = service.price + 200;
-    final imageUrl = service.imageUrl;
-    final assetPath = _categoryAssetPathForTitle(service.title);
-
-    return SizedBox(
-      width: 202 * scale,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        elevation: 0,
-        child: InkWell(
-          onTap: () {
-            AppHaptics.press();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(15),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: AppColors.borderSubtle),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.cardShadow,
-                  blurRadius: 14 * scale,
-                  offset: Offset(0, 5 * scale),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: 96 * scale,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(15),
-                    ),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: service.color),
-                      child: Stack(
-                        children: [
-                          if (imageUrl != null)
-                            Positioned.fill(
-                              child: Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    const SizedBox.shrink(),
-                              ),
-                            ),
-                          if (imageUrl == null && assetPath != null)
-                            Positioned.fill(
-                              child: Image.asset(assetPath, fit: BoxFit.cover),
-                            ),
-                          if (imageUrl == null &&
-                              assetPath == null &&
-                              !service.usesApiImage) ...[
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: _ServicePatternPainter(
-                                  color: AppColors.brandForest,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 10 * scale,
-                              bottom: 8 * scale,
-                              child: Icon(
-                                service.icon,
-                                color: AppColors.brandForest,
-                                size: 72 * scale,
-                              ),
-                            ),
-                          ],
-                          Positioned(
-                            left: 10 * scale,
-                            top: 10 * scale,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8 * scale,
-                                vertical: 4 * scale,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.90),
-                                borderRadius: BorderRadius.circular(8 * scale),
-                              ),
-                              child: Text(
-                                service.badge,
-                                style: TextStyle(
-                                  color: AppColors.brandForest,
-                                  fontSize: 9.5 * scale,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12 * scale,
-                      10 * scale,
-                      12 * scale,
-                      12 * scale,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          service.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppColors.brandForest,
-                            fontSize: 14.5 * scale,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
-                            height: 1.1,
-                          ),
-                        ),
-                        SizedBox(height: 7 * scale),
-                        Row(
-                          children: [
-                            Icon(
-                              LucideIcons.star,
-                              color: AppColors.brandGold,
-                              size: 15 * scale,
-                            ),
-                            SizedBox(width: 3 * scale),
-                            Text(
-                              '4.8',
-                              style: TextStyle(
-                                color: AppColors.brandForest,
-                                fontSize: 11.5 * scale,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(width: 4 * scale),
-                            Text(
-                              '(2.3K)',
-                              style: TextStyle(
-                                color: AppColors.mutedText,
-                                fontSize: 11 * scale,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    LucideIcons.clock,
-                                    color: AppColors.mutedText,
-                                    size: 14 * scale,
-                                  ),
-                                  SizedBox(width: 3 * scale),
-                                  Flexible(
-                                    child: Text(
-                                      service.duration,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: AppColors.mutedText,
-                                        fontSize: 10.5 * scale,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 9 * scale),
-                        Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 8 * scale,
-                            vertical: 5 * scale,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandForest.withValues(
-                              alpha: 0.06,
-                            ),
-                            borderRadius: BorderRadius.circular(10 * scale),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.shieldCheck,
-                                color: AppColors.brandForest,
-                                size: 13 * scale,
-                              ),
-                              SizedBox(width: 4 * scale),
-                              Expanded(
-                                child: Text(
-                                  'Verified Professional',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: AppColors.brandForest,
-                                    fontSize: 9.5 * scale,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Spacer(),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Rs${service.price}',
-                              style: TextStyle(
-                                color: AppColors.brandForest,
-                                fontSize: 14 * scale,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                            SizedBox(width: 4 * scale),
-                            Flexible(
-                              child: Text(
-                                'Rs$originalPrice',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: AppColors.mutedText,
-                                  fontSize: 10 * scale,
-                                  fontWeight: FontWeight.w500,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 6 * scale),
-                            SizedBox(
-                              height: 31 * scale,
-                              child: FilledButton(
-                                onPressed: () {
-                                  AppHaptics.press();
-                                  onTap();
-                                },
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.brandForest,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 7 * scale,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      10 * scale,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Book Now',
-                                  style: TextStyle(
-                                    fontSize: 9.5 * scale,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ServicePatternPainter extends CustomPainter {
-  const _ServicePatternPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.10)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-
-    for (var i = 0; i < 4; i++) {
-      canvas.drawCircle(
-        Offset(size.width * 0.16 + i * size.width * 0.24, size.height * 0.28),
-        size.width * 0.22,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

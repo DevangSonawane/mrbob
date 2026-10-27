@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mrbob/core/data/services_data.dart';
@@ -39,6 +38,9 @@ void main() {
   }
 
   testWidgets('renders header, stats and booking cards', (tester) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(wrap(BookingsPage(bookings: bookings)));
     await tester.pumpAndSettle();
 
@@ -51,12 +53,8 @@ void main() {
     expect(find.text('Completed'), findsWidgets);
   });
 
-  // Segments carry no keys in the GlassSegmentedControl API, so scope
-  // taps to the control: card status labels reuse the same words.
-  Finder segment(String label) => find.descendant(
-    of: find.byType(GlassSegmentedControl),
-    matching: find.text(label),
-  );
+  // Filter pills are keyed: card status labels reuse the same words.
+  Finder segment(String label) => find.byKey(ValueKey('filter-$label'));
 
   testWidgets('filters bookings by segment', (tester) async {
     await tester.pumpWidget(wrap(BookingsPage(bookings: bookings)));
@@ -74,19 +72,6 @@ void main() {
 
     expect(find.text('Plumbing fixes'), findsOneWidget);
     expect(find.text('Painting repairs'), findsNothing);
-  });
-
-  testWidgets('glass pill follows a horizontal drag', (tester) async {
-    await tester.pumpWidget(wrap(BookingsPage(bookings: bookings)));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Plumbing fixes'), findsOneWidget);
-
-    await tester.drag(segment('All'), const Offset(560, 0));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Plumbing fixes'), findsNothing);
-    expect(find.text('Painting repairs'), findsOneWidget);
   });
 
   testWidgets('shows empty state when there are no bookings', (tester) async {

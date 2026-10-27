@@ -4,11 +4,7 @@
 /// backend's `message` field, so UI can surface real failures
 /// ("Email already registered", 409) instead of generic text.
 class ApiException implements Exception {
-  const ApiException(
-    this.message, {
-    this.statusCode,
-    this.code,
-  });
+  const ApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;

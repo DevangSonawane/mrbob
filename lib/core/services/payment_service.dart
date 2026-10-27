@@ -18,9 +18,7 @@ class PaymentService {
   /// `POST /payments/bookings/{bookingId}/order` — create a
   /// Razorpay order for a booking.
   Future<Payment> createOrder(String bookingId) async {
-    final data = await _api.post(
-      '/payments/bookings/$bookingId/order',
-    );
+    final data = await _api.post('/payments/bookings/$bookingId/order');
     if (data is! Map<String, dynamic>) {
       throw const ApiException('Unexpected payment response');
     }

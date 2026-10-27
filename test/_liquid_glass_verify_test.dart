@@ -15,7 +15,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Service Categories'), findsOneWidget);
+    expect(find.text('WHAT NEEDS FIXING?'), findsOneWidget);
 
     // Tabs are icon-only (labels removed); scope icon taps to the bar and
     // use the unselected (outlined) variant visible before each tap.
@@ -30,7 +30,7 @@ void main() {
 
     await tester.tap(barIcon(Icons.home_outlined));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Service Categories'), findsOneWidget);
+    expect(find.text('WHAT NEEDS FIXING?'), findsOneWidget);
 
     // GlassSearchBar renders a CupertinoTextField internally
     // (GlassTextField.search), not a Material TextField.

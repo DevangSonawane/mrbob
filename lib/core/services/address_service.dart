@@ -110,7 +110,8 @@ class AddressService {
       if (cityId != null && cityId.isNotEmpty) 'cityId': cityId,
       if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
       if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
-      if (pincode != null && pincode.trim().isNotEmpty) 'pincode': pincode.trim(),
+      if (pincode != null && pincode.trim().isNotEmpty)
+        'pincode': pincode.trim(),
       if (latitude != null && longitude != null) ...{
         'latitude': latitude,
         'longitude': longitude,
@@ -156,9 +157,9 @@ class AddressService {
     }
 
     try {
-      final position = await LocationService.instance
-          .currentPosition()
-          .timeout(const Duration(seconds: 12));
+      final position = await LocationService.instance.currentPosition().timeout(
+        const Duration(seconds: 12),
+      );
       return await update(
         address.id,
         latitude: position.latitude,

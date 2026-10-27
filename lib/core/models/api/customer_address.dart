@@ -91,10 +91,7 @@ class CustomerAddress {
       if (zone != null) 'zoneId': zone!.id,
       if (state.trim().isNotEmpty) 'state': state.trim(),
       if (pincode.trim().isNotEmpty) 'pincode': pincode.trim(),
-      if (hasLocation) ...{
-        'latitude': latitude,
-        'longitude': longitude,
-      },
+      if (hasLocation) ...{'latitude': latitude, 'longitude': longitude},
       if (contactName != null && contactName!.trim().isNotEmpty)
         'contactName': contactName!.trim(),
       if (contactPhone != null && contactPhone!.trim().isNotEmpty)

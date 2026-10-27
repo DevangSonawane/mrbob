@@ -95,9 +95,7 @@ class _ThinkingOrbState extends State<ThinkingOrb>
   /// [initState].
   Color _resolveInk() =>
       widget.ink ??
-      (Theme.of(context).brightness == Brightness.dark
-          ? _darkInk
-          : _lightInk);
+      (Theme.of(context).brightness == Brightness.dark ? _darkInk : _lightInk);
 
   /// Pushes the resolved ink into the painter. Ink feeds the cached glow
   /// shaders and warmth ramp, so a change re-derives both.
@@ -150,10 +148,7 @@ class _ThinkingOrbState extends State<ThinkingOrb>
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: CustomPaint(
-        size: Size.square(widget.size),
-        painter: _painter,
-      ),
+      child: CustomPaint(size: Size.square(widget.size), painter: _painter),
     );
   }
 }
@@ -283,7 +278,9 @@ class _OrbPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final amp = (amplitudeListenable?.value ?? amplitude).clamp(0.0, 1.0);
     final ampIdx = (amp * _ampBuckets).ceil() - 1;
-    final bucket = ampIdx < 0 ? 0 : (ampIdx > _ampBuckets - 1 ? _ampBuckets - 1 : ampIdx);
+    final bucket = ampIdx < 0
+        ? 0
+        : (ampIdx > _ampBuckets - 1 ? _ampBuckets - 1 : ampIdx);
 
     final t = clock.value * 2 * math.pi * speed;
     final center = Offset(size.width / 2, size.height / 2);
@@ -383,8 +380,10 @@ class _OrbPainter extends CustomPainter {
     for (var i = 0; i < n; i++) {
       final d = _dots[i];
       // Front + loud dots warm toward gold — lively color response.
-      final depthIdx =
-          (d.depth * (_depthBuckets - 1)).round().clamp(0, _depthBuckets - 1);
+      final depthIdx = (d.depth * (_depthBuckets - 1)).round().clamp(
+        0,
+        _depthBuckets - 1,
+      );
       _dotPaint.color = ramp[depthIdx].withValues(
         alpha: (0.22 + d.depth * 0.78) * (0.75 + d.twinkle * 0.25),
       );

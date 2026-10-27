@@ -33,7 +33,9 @@ void main() {
     // Real delays via runAsync: the driver integrates wall-clock dt.
     for (var i = 0; i < 60; i++) {
       level.value = 1.0;
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 32)));
+      await t.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 32)),
+      );
       await t.pump();
     }
     await expectLater(

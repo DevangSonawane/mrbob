@@ -94,9 +94,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLocating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not read your location.')),
       );
     }
@@ -331,10 +329,7 @@ class _CustomerOnboardingPageState extends State<CustomerOnboardingPage> {
                               ),
                               decoration: const InputDecoration(
                                 hintText: 'Flat, street, landmark',
-                                prefixIcon: Icon(
-                                  Icons.home_rounded,
-                                  size: 20,
-                                ),
+                                prefixIcon: Icon(Icons.home_rounded, size: 20),
                               ),
                             ),
                             const SizedBox(height: 8),

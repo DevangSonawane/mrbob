@@ -12,8 +12,7 @@ class GeoPoint {
   double get roundedLatitude => _round(latitude);
   double get roundedLongitude => _round(longitude);
 
-  static double _round(double value) =>
-      double.parse(value.toStringAsFixed(6));
+  static double _round(double value) => double.parse(value.toStringAsFixed(6));
 
   @override
   bool operator ==(Object other) =>

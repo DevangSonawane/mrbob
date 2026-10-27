@@ -42,9 +42,7 @@ class ReviewService {
   /// `GET /reviews/professional/{professionalId}` — paginated
   /// reviews for a professional (public).
   Future<List<Review>> listForProfessional(String professionalId) async {
-    final data = await _api.get(
-      '/reviews/professional/$professionalId',
-    );
+    final data = await _api.get('/reviews/professional/$professionalId');
     return parseReviewList(data);
   }
 }
