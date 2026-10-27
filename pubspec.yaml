@@ -48,6 +48,7 @@ dependencies:
   receipt_printer: ^1.0.2
   # GPS for the address pin + "vendors nearby" estimate.
   geolocator: ^13.0.4
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:

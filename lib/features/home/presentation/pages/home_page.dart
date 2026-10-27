@@ -23,8 +23,10 @@ import '../../../../core/services/onboarding_service.dart';
 import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
+import '../../../amc/presentation/pages/amc_page.dart';
 import '../../../booking/presentation/widgets/vendors_nearby_card.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
+import '../widgets/home_hero_banners.dart';
 
 const _homeHeaderColor = Color(0xFF035864);
 
@@ -51,9 +53,9 @@ String? _categoryAssetPathForTitle(String title) {
 
 /// Blinkit-style home:
 /// - Solid green header that COLLAPSES on scroll.
-/// - White search card that STAYS PINNED below the status bar with rounded
-///   bottom corners, exactly like Blinkit's sticky search bar.
-/// - White body tucked close under the search, clean green -> white curve.
+/// - A Swiggy-style promo banner carousel fills the header behind the pinned
+///   location and search controls.
+/// - White body begins directly below the fixed-height header.
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onBooked});
 
@@ -72,6 +74,29 @@ class _HomePageState extends State<HomePage> {
   /// View filter for the service collections below. Null shows everything;
   /// the booking-mode [GlassMenu] in [_SearchBar] sets and clears it.
   BookingMode? _modeFilter;
+
+  /// Live colour of the hero banner under the header, so the status-bar
+  /// strip above the SafeArea follows the carousel.
+  final _heroColor = ValueNotifier<Color>(_homeHeaderColor);
+
+  @override
+  void dispose() {
+    _heroColor.dispose();
+    super.dispose();
+  }
+
+  void _onHeroCta(HeroBannerKind kind) {
+    AppHaptics.press();
+    switch (kind) {
+      case HeroBannerKind.amc:
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const AmcPage()),
+        );
+      case HeroBannerKind.services || HeroBannerKind.inspection:
+        _openAllCategories(context);
+    }
+  }
 
   /// Services visible under the current [_modeFilter].
   List<ServiceItem> get _visibleServices => switch (_modeFilter) {
@@ -194,134 +219,135 @@ class _HomePageState extends State<HomePage> {
       // dynamic island on all Android + iPhones, so content never slides
       // into the notification area. Header scaffold = matching status-bar
       // gutter, light icons so they stay visible on the green.
-      body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: _homeHeaderColor,
-        ),
-        child: SafeArea(
-          top: true,
-          bottom: false,
-          left: false,
-          right: false,
-          child: Container(
-            color: Colors.white,
-            child: CustomScrollView(
-              // Platform default: clamping on Android, bouncing on iOS,
-              // so overscroll feels native on every phone.
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                // ---- One single green header (Paytm-style collapsing unit,
-                // pinned:true so it sticks to the viewport). Scroll and the
-                // search glides diagonally up into the header slot while
-                // bell/profile fade out — collapsed = location + search only.
-                // Promo banner scrolls away beneath it. ----
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _CollapsingHeaderDelegate(
-                    scale: scale,
-                    horizontalInset: horizontalInset,
-                    modeFilter: _modeFilter,
-                    onModeFilterChanged: (mode) =>
-                        setState(() => _modeFilter = mode),
+      body: ValueListenableBuilder<Color>(
+        valueListenable: _heroColor,
+        builder: (context, color, child) =>
+            ColoredBox(color: color, child: child),
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+          ),
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            left: false,
+            right: false,
+            child: Container(
+              color: Colors.white,
+              child: CustomScrollView(
+                // Platform default: clamping on Android, bouncing on iOS,
+                // so overscroll feels native on every phone.
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // ---- One single green header (Paytm-style collapsing unit,
+                  // pinned:true so it sticks to the viewport). Scroll and the
+                  // search glides diagonally up into the header slot while
+                  // bell/profile fade out — collapsed = location + search only.
+                  // Artwork stays behind the controls. ----
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _CollapsingHeaderDelegate(
+                      scale: scale,
+                      horizontalInset: horizontalInset,
+                      modeFilter: _modeFilter,
+                      onModeFilterChanged: (mode) =>
+                          setState(() => _modeFilter = mode),
+                      heroColor: _heroColor,
+                      onHeroCta: _onHeroCta,
+                    ),
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: _PromoBanner(
-                    scale: scale,
-                    horizontalInset: horizontalInset,
-                  ),
-                ),
-
-                // ---- Body (scrolls under the sticky search) ----
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalInset,
-                          36 * scale,
-                          horizontalInset,
-                          22 * scale,
-                        ),
-                        child: _SectionHeader(
-                          title: 'Service Categories',
-                          onViewAll: () => _openAllCategories(context),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: horizontalInset,
-                        ),
-                        child: _isLoadingCategories
-                            ? _CategoriesLoading(scale: scale)
-                            : GridView.builder(
-                                itemCount: _visibleServices.take(6).length,
-                                shrinkWrap: true,
-                                padding: EdgeInsets.zero,
-                                physics: const NeverScrollableScrollPhysics(),
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 3,
-                                      mainAxisSpacing: 16 * scale,
-                                      crossAxisSpacing: 16 * scale,
-                                      childAspectRatio: 0.78,
-                                    ),
-                                itemBuilder: (context, index) {
-                                  final service = _visibleServices[index];
-                                  return _CategoryTile(
-                                    service: service,
-                                    scale: scale,
-                                    onTap: () => _openService(context, service),
-                                  );
-                                },
-                              ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalInset,
-                          38 * scale,
-                          horizontalInset,
-                          22 * scale,
-                        ),
-                        child: _SectionHeader(
-                          title: 'Popular Services',
-                          onViewAll: _visibleServices.isEmpty
-                              ? null
-                              : () => _openService(
-                                  context,
-                                  _visibleServices.first,
-                                ),
-                        ),
-                      ),
-                      SizedBox(
-                        height: popularHeight,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
+                  // ---- Body (scrolls under the sticky search) ----
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
                           padding: EdgeInsets.fromLTRB(
                             horizontalInset,
-                            2 * scale,
+                            36 * scale,
                             horizontalInset,
-                            12 * scale,
+                            22 * scale,
                           ),
-                          itemCount: _visibleServices.length,
-                          separatorBuilder: (_, _) =>
-                              SizedBox(width: 16 * scale),
-                          itemBuilder: (context, index) {
-                            final service = _visibleServices[index];
-                            return _PopularServiceCard(
-                              service: service,
-                              scale: scale,
-                              onTap: () => _openService(context, service),
-                            );
-                          },
+                          child: _SectionHeader(
+                            title: 'Service Categories',
+                            onViewAll: () => _openAllCategories(context),
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 108 + bottomInset),
-                    ],
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalInset,
+                          ),
+                          child: _isLoadingCategories
+                              ? _CategoriesLoading(scale: scale)
+                              : GridView.builder(
+                                  itemCount: _visibleServices.take(6).length,
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 3,
+                                        mainAxisSpacing: 16 * scale,
+                                        crossAxisSpacing: 16 * scale,
+                                        childAspectRatio: 0.78,
+                                      ),
+                                  itemBuilder: (context, index) {
+                                    final service = _visibleServices[index];
+                                    return _CategoryTile(
+                                      service: service,
+                                      scale: scale,
+                                      onTap: () =>
+                                          _openService(context, service),
+                                    );
+                                  },
+                                ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalInset,
+                            38 * scale,
+                            horizontalInset,
+                            22 * scale,
+                          ),
+                          child: _SectionHeader(
+                            title: 'Popular Services',
+                            onViewAll: _visibleServices.isEmpty
+                                ? null
+                                : () => _openService(
+                                    context,
+                                    _visibleServices.first,
+                                  ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: popularHeight,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: EdgeInsets.fromLTRB(
+                              horizontalInset,
+                              2 * scale,
+                              horizontalInset,
+                              12 * scale,
+                            ),
+                            itemCount: _visibleServices.length,
+                            separatorBuilder: (_, _) =>
+                                SizedBox(width: 16 * scale),
+                            itemBuilder: (context, index) {
+                              final service = _visibleServices[index];
+                              return _PopularServiceCard(
+                                service: service,
+                                scale: scale,
+                                onTap: () => _openService(context, service),
+                              );
+                            },
+                          ),
+                        ),
+                        SizedBox(height: 108 + bottomInset),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2497,23 +2523,33 @@ class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.horizontalInset,
     required this.modeFilter,
     required this.onModeFilterChanged,
+    required this.heroColor,
+    required this.onHeroCta,
   });
 
   final double scale;
   final double horizontalInset;
   final BookingMode? modeFilter;
   final ValueChanged<BookingMode?> onModeFilterChanged;
+  final ValueNotifier<Color> heroColor;
+  final ValueChanged<HeroBannerKind> onHeroCta;
 
   static const _locationHeight = 64.0;
   // 8 top + 52 search + 8 bottom. Fixed so the search card can never
   // overflow and get covered, on any screen width.
   static const _searchHeight = 68.0;
+  // Small breathing gap under the status bar, then the controls; the promo
+  // banner band sits below them (the banner background fills the whole
+  // header, Swiggy-style).
+  static const _topArtworkHeight = 6.0;
+  static const _artworkHeight = 250.0;
 
   @override
   double get minExtent => _searchHeight;
 
   @override
-  double get maxExtent => _locationHeight + _searchHeight;
+  double get maxExtent =>
+      _topArtworkHeight + _locationHeight + _searchHeight + _artworkHeight;
 
   @override
   Widget build(
@@ -2521,94 +2557,134 @@ class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    final t = (shrinkOffset / _locationHeight).clamp(0.0, 1.0);
+    final t = (shrinkOffset / (_topArtworkHeight + _locationHeight)).clamp(
+      0.0,
+      1.0,
+    );
     // Smoothstep for fades/widths. Heights stay LINEAR in t so the column
     // total always equals the sliver extent exactly (eased heights drift
     // off-extent mid-transition = RenderFlex overflow + yellow stripes).
     final e = t * t * (3 - 2 * t);
-    return Container(
-      color: _homeHeaderColor,
-      child: Stack(
-        children: [
-          Column(
-            mainAxisSize: MainAxisSize.max,
+    // Banner copy scrolls up under the search bar; it only fades over the
+    // last stretch of the collapse so the pinned bar ends up clean.
+    final collapseRange = maxExtent - minExtent;
+    final bannerOpacity =
+        (1 - (shrinkOffset - collapseRange * 0.6) / (collapseRange * 0.4))
+            .clamp(0.0, 1.0);
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: _homeHeaderColor,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+        child: SizedBox.expand(
+          child: Stack(
             children: [
-              // Location row (address text + actions) collapses away, but the
-              // map pin itself is drawn once in the overlay below and remains
-              // the fixed anchor for the search animation.
-              ClipRect(
-                child: SizedBox(
-                  height: _locationHeight * (1 - t),
-                  child: OverflowBox(
-                    minHeight: 0,
-                    maxHeight: _locationHeight,
-                    alignment: Alignment.topCenter,
+              // Promo banner carousel behind the controls. Backgrounds keep
+              // their full expanded height and drift up slower than the
+              // scroll; copy and art move with the scroll and slide under
+              // the pinned search bar. Motion pauses once fully collapsed.
+              Positioned.fill(
+                child: HomeHeroBanners(
+                  scale: scale,
+                  horizontalInset: horizontalInset,
+                  height: maxExtent,
+                  contentTop:
+                      _topArtworkHeight + _locationHeight + _searchHeight,
+                  parallax: -shrinkOffset * 0.35,
+                  scrollOffset: shrinkOffset,
+                  contentOpacity: bannerOpacity,
+                  brandColor: _homeHeaderColor,
+                  colorNotifier: heroColor,
+                  onCta: onHeroCta,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  SizedBox(height: _topArtworkHeight * (1 - t)),
+                  // Location row (address text + actions) collapses away, but the
+                  // map pin itself is drawn once in the overlay below and remains
+                  // the fixed anchor for the search animation.
+                  ClipRect(
                     child: SizedBox(
-                      height: _locationHeight,
-                      child: Opacity(
-                        opacity: (1 - e * 1.4).clamp(0.0, 1.0),
-                        child: Transform.translate(
-                          offset: Offset(0, -28 * e),
-                          child: Container(
-                            color: _homeHeaderColor,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: horizontalInset,
-                              vertical: 10,
+                      height: _locationHeight * (1 - t),
+                      child: OverflowBox(
+                        minHeight: 0,
+                        maxHeight: _locationHeight,
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          height: _locationHeight,
+                          child: Opacity(
+                            opacity: (1 - e * 1.4).clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(0, -28 * e),
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: horizontalInset,
+                                  vertical: 10,
+                                ),
+                                child: _LocationBar(
+                                  scale: scale,
+                                  showPin: false,
+                                ),
+                              ),
                             ),
-                            child: _LocationBar(scale: scale, showPin: false),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              // Search row glides diagonally into the fixed map-pin anchor.
-              Container(
-                height: _searchHeight,
-                color: _homeHeaderColor,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: horizontalInset + (48 * e),
-                    right: horizontalInset,
+                  // Search row glides diagonally into the fixed map-pin anchor.
+                  Container(
+                    height: _searchHeight,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: horizontalInset + (48 * e),
+                        right: horizontalInset,
+                      ),
+                      child: Transform.translate(
+                        offset: Offset(0, -6 * e),
+                        child: _SearchBar(
+                          onChanged: (_) {},
+                          modeFilter: modeFilter,
+                          onModeFilterChanged: onModeFilterChanged,
+                        ),
+                      ),
+                    ),
                   ),
-                  child: Transform.translate(
-                    offset: Offset(0, -6 * e),
-                    child: _SearchBar(
-                      onChanged: (_) {},
-                      modeFilter: modeFilter,
-                      onModeFilterChanged: onModeFilterChanged,
+                ],
+              ),
+              Positioned(
+                left: horizontalInset,
+                top:
+                    _topArtworkHeight * (1 - t) +
+                    (_searchHeight - 38 * scale) / 2,
+                child: SizedBox(
+                  width: 38 * scale,
+                  height: 38 * scale,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      LucideIcons.mapPin,
+                      color: Colors.white,
+                      size: 20 * scale,
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          Positioned(
-            left: horizontalInset,
-            top: (_searchHeight - 38 * scale) / 2,
-            child: SizedBox(
-              width: 38 * scale,
-              height: 38 * scale,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: _homeHeaderColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(
-                  LucideIcons.mapPin,
-                  color: Colors.white,
-                  size: 20 * scale,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2618,7 +2694,9 @@ class _CollapsingHeaderDelegate extends SliverPersistentHeaderDelegate {
       oldDelegate.scale != scale ||
       oldDelegate.horizontalInset != horizontalInset ||
       oldDelegate.modeFilter != modeFilter ||
-      oldDelegate.onModeFilterChanged != onModeFilterChanged;
+      oldDelegate.onModeFilterChanged != onModeFilterChanged ||
+      oldDelegate.heroColor != heroColor ||
+      oldDelegate.onHeroCta != onHeroCta;
 }
 
 /// Sticky search row: a real [GlassSearchBar] pill plus the booking-mode
@@ -2636,6 +2714,22 @@ class _SearchBar extends StatefulWidget {
 }
 
 class _SearchBarState extends State<_SearchBar> {
+  static const _searchHints = [
+    'plumber',
+    'electrician',
+    'painter',
+    'carpenter',
+    'AC service',
+    'deep inspection',
+  ];
+
+  static const _hintStyle = TextStyle(
+    color: Colors.white70,
+    fontSize: 14.5,
+    fontWeight: FontWeight.w500,
+    letterSpacing: -0.1,
+  );
+
   late final TextEditingController _controller;
 
   /// Imperative handle for the mode menu: item taps update the filter and
@@ -2690,25 +2784,48 @@ class _SearchBarState extends State<_SearchBar> {
       child: Row(
         children: [
           Expanded(
-            child: GlassSearchBar(
-              controller: _controller,
-              placeholder: 'Search for a service...',
-              useOwnLayer: true,
-              height: 52,
-              onChanged: (value) => widget.onChanged?.call(value),
-              searchIconColor: Colors.white,
-              textStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.1,
-              ),
-              placeholderStyle: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14.5,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.1,
-              ),
+            child: Stack(
+              children: [
+                GlassSearchBar(
+                  controller: _controller,
+                  // Empty: the animated hint below stands in for it.
+                  placeholder: '',
+                  useOwnLayer: true,
+                  height: 52,
+                  onChanged: (value) => widget.onChanged?.call(value),
+                  searchIconColor: Colors.white,
+                  textStyle: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
+                  ),
+                  placeholderStyle: _hintStyle,
+                ),
+                // Swiggy-style rolling hint, aligned with the field's text
+                // (12 padding + 20 icon + 8 spacing) and hidden once the
+                // user types.
+                Positioned(
+                  left: 40,
+                  right: 36,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _controller,
+                      builder: (context, value, child) =>
+                          value.text.isEmpty ? child! : const SizedBox.shrink(),
+                      child: const Align(
+                        alignment: Alignment.centerLeft,
+                        child: RotatingSearchHint(
+                          terms: _searchHints,
+                          style: _hintStyle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 10),
@@ -2784,10 +2901,7 @@ class _SearchBarState extends State<_SearchBar> {
               ),
             ],
             triggerBuilder: (context, _) => GlassIconButton(
-              icon: const Icon(
-                Icons.tune_rounded,
-                color: Colors.white,
-              ),
+              icon: const Icon(Icons.tune_rounded, color: Colors.white),
               onPressed: _openFilterMenu,
               useOwnLayer: true,
               quality: GlassQuality.premium,
@@ -2844,214 +2958,94 @@ class _LocationBarState extends State<_LocationBar> {
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final showPin = widget.showPin;
-    return ColoredBox(
-      color: _homeHeaderColor,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Opacity(
-            opacity: showPin ? 1 : 0,
-            child: Container(
-              width: 38 * scale,
-              height: 38 * scale,
-              decoration: BoxDecoration(
-                color: _homeHeaderColor,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  width: 1,
-                ),
-              ),
-              child: Icon(
-                LucideIcons.mapPin,
-                color: Colors.white,
-                size: 20 * scale,
-              ),
-            ),
-          ),
-          SizedBox(width: 10 * scale),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'YOUR LOCATION',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.68),
-                    fontSize: 10 * scale,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.9,
-                  ),
-                ),
-                SizedBox(height: 2 * scale),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16.5 * scale,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      LucideIcons.chevronDown,
-                      color: Colors.white.withValues(alpha: 0.78),
-                      size: 22 * scale,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          _CircleAction(scale: scale, icon: LucideIcons.bell, hasDot: true),
-          SizedBox(width: 10 * scale),
-          Container(
-            width: 44 * scale,
-            height: 44 * scale,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Opacity(
+          opacity: showPin ? 1 : 0,
+          child: Container(
+            width: 38 * scale,
+            height: 38 * scale,
             decoration: BoxDecoration(
-              color: _homeHeaderColor,
+              color: Colors.black.withValues(alpha: 0.22),
               shape: BoxShape.circle,
               border: Border.all(
                 color: Colors.white.withValues(alpha: 0.18),
                 width: 1,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
             child: Icon(
-              LucideIcons.user,
+              LucideIcons.mapPin,
               color: Colors.white,
-              size: 24 * scale,
+              size: 20 * scale,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Blinkit-style promo banner: green card that scrolls away below the
-/// sticky search, with dot texture, headline, CTA + illustration.
-class _PromoBanner extends StatelessWidget {
-  const _PromoBanner({required this.scale, required this.horizontalInset});
-
-  final double scale;
-  final double horizontalInset;
-
-  @override
-  Widget build(BuildContext context) {
-    // Full-bleed green banner plugged flush under the sticky search (zero
-    // top gap so it moves up). The OUTER container owns the bottom curve
-    // so the bottom corners actually round into the white body.
-    return Container(
-      decoration: BoxDecoration(
-        color: _homeHeaderColor,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          horizontalInset,
-          2 * scale,
-          horizontalInset,
-          18 * scale,
         ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(14 * scale, 4 * scale, 14 * scale, 0),
-          child: Stack(
+        SizedBox(width: 10 * scale),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Positioned.fill(child: _DotTexture()),
-              // ---- Headline + premium illustration card ----
-              SizedBox(
-                height: 158 * scale,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 4 * scale),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'YOUR SOLUTION,\nONE TAP AWAY!',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18.5 * scale,
-                                height: 1.06,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            SizedBox(height: 8 * scale),
-                            Text(
-                              'Seamless, Fast & Reliable\nServices at Your Fingertips',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.72),
-                                fontSize: 10.5 * scale,
-                                height: 1.35,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: -0.05,
-                              ),
-                            ),
-                            const Spacer(),
-                            SizedBox(
-                              height: 38 * scale,
-                              child: FilledButton(
-                                onPressed: () {},
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: _homeHeaderColor,
-                                  elevation: 0,
-                                  shadowColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      11 * scale,
-                                    ),
-                                  ),
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 20 * scale,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Explore',
-                                  style: TextStyle(
-                                    fontSize: 13 * scale,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+              Text(
+                'YOUR LOCATION',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.68),
+                  fontSize: 10 * scale,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.9,
+                ),
+              ),
+              SizedBox(height: 2 * scale),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      _label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16.5 * scale,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                        height: 1.1,
                       ),
                     ),
-                    SizedBox(width: 10 * scale),
-                    _HeroCard(scale: scale),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    LucideIcons.chevronDown,
+                    color: Colors.white.withValues(alpha: 0.78),
+                    size: 22 * scale,
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
+        _CircleAction(scale: scale, icon: LucideIcons.bell, hasDot: true),
+        SizedBox(width: 10 * scale),
+        Container(
+          width: 44 * scale,
+          height: 44 * scale,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.22),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(LucideIcons.user, color: Colors.white, size: 24 * scale),
+        ),
+      ],
     );
   }
 }
@@ -3073,7 +3067,7 @@ class _CircleAction extends StatelessWidget {
       width: 44 * scale,
       height: 44 * scale,
       decoration: BoxDecoration(
-        color: _homeHeaderColor,
+        color: Colors.black.withValues(alpha: 0.22),
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.18),
@@ -3101,7 +3095,10 @@ class _CircleAction extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  border: Border.all(color: _homeHeaderColor, width: 1.5),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -3109,129 +3106,6 @@ class _CircleAction extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Premium white illustration card replacing the cheap painter workers.
-/// Clean, Blinkit-like promo tile with icon + rating + verified chips.
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.scale});
-
-  final double scale;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 148 * scale,
-      height: 150 * scale,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(9 * scale),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 46 * scale,
-                  height: 46 * scale,
-                  decoration: BoxDecoration(
-                    color: AppColors.brandForest,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(
-                    LucideIcons.hammer,
-                    color: AppColors.brandGold,
-                    size: 26 * scale,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8 * scale,
-                    vertical: 5 * scale,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceTint,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        LucideIcons.star,
-                        color: AppColors.brandForest,
-                        size: 13 * scale,
-                      ),
-                      SizedBox(width: 3 * scale),
-                      Flexible(
-                        child: Text(
-                          '4.9 Verified',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppColors.brandForest,
-                            fontSize: 9.5 * scale,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 4 * scale),
-                Text(
-                  '60-min doorstep fix',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.brandForest,
-                    fontSize: 10.5 * scale,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DotTexture extends StatelessWidget {
-  const _DotTexture();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(painter: _DotTexturePainter());
-  }
-}
-
-class _DotTexturePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.07);
-    const gap = 18.0;
-    const r = 1.4;
-    for (var y = gap / 2; y < size.height; y += gap) {
-      for (var x = gap / 2; x < size.width; x += gap) {
-        canvas.drawCircle(Offset(x, y), r, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _SectionHeader extends StatelessWidget {
