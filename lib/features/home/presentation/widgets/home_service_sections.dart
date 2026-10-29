@@ -9,7 +9,7 @@ import '../../../../shared/widgets/service_visuals.dart';
 /// idiom (Swiggy "What's on your mind?", Zomato dividers, Instamart ADD
 /// buttons):
 /// - [CapsSectionHeader]: centred caps title between fading hairlines.
-/// - [HomeCategoryRail]: two-row scrolling rail of circular photo tiles.
+/// - [HomeCategoryRail]: 3-column grid of five image tiles plus See all.
 /// - [HomePopularRail]: tall offer cards with an overlapping BOOK button.
 ///
 /// Motion is one-shot only (a staggered pop-in when data arrives, a spring
@@ -17,6 +17,31 @@ import '../../../../shared/widgets/service_visuals.dart';
 
 const _ratingGreen = Color(0xFF1C8A3A);
 const _bookTeal = Color(0xFF035864);
+
+/// The home rail shows a fixed handful of categories; the rest live on the
+/// all-categories page.
+const _homeCategoryCount = 5;
+const _homeColumns = 3;
+
+/// Home tile artwork; categories without their own image use the AC unit.
+String _categoryImage(ServiceItem service) {
+  final title = service.title.toLowerCase();
+  if (title.contains('paint')) return 'assets/service_cat/painting_can.png';
+  if (title.contains('pest')) return 'assets/service_cat/pest_control.png';
+  return 'assets/service_cat/ac_unit.png';
+}
+
+/// The categories featured on home: pest control takes appliance repair's
+/// slot, then the first [_homeCategoryCount] in catalogue order.
+List<ServiceItem> _homeCategories(List<ServiceItem> services) {
+  bool isPest(ServiceItem s) => s.title.toLowerCase().contains('pest');
+  bool isAppliance(ServiceItem s) => s.title.toLowerCase().contains('applian');
+  final pest = services.where(isPest).firstOrNull;
+  return [
+    for (final service in services)
+      if (isAppliance(service)) ?pest else if (!isPest(service)) service,
+  ].take(_homeCategoryCount).toList();
+}
 
 // ---------------------------------------------------------------------------
 // Categories
@@ -82,98 +107,100 @@ class _HomeCategoryRailState extends State<HomeCategoryRail>
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final s = widget.scale;
-    final tileWidth = 80.0 * s;
-    final tileHeight = 106.0 * s;
-    final spacing = 14.0 * s;
-    final height = tileHeight * 2 + spacing;
+    final imageHeight = 72.0 * s;
+    final rowSpacing = 18.0 * s;
+    final columnSpacing = 10.0 * s;
+    final padding = EdgeInsets.symmetric(horizontal: widget.horizontalInset);
+
+    // Lays [cells] out row-major, _homeColumns per row.
+    Widget grid(List<Widget> cells) => Padding(
+      padding: padding,
+      child: Column(
+        children: [
+          for (var row = 0; row * _homeColumns < cells.length; row++) ...[
+            if (row > 0) SizedBox(height: rowSpacing),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var col = 0; col < _homeColumns; col++) ...[
+                  if (col > 0) SizedBox(width: columnSpacing),
+                  Expanded(
+                    child: row * _homeColumns + col < cells.length
+                        ? cells[row * _homeColumns + col]
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
 
     if (widget.loading) {
-      return SizedBox(
-        height: height,
-        child: ShimmerBox(
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.symmetric(horizontal: widget.horizontalInset),
-            itemCount: 5,
-            separatorBuilder: (_, _) => SizedBox(width: 8 * s),
-            itemBuilder: (_, _) => SizedBox(
-              width: tileWidth,
-              child: Column(
-                children: [
-                  for (var row = 0; row < 2; row++) ...[
-                    if (row == 1) SizedBox(height: spacing),
-                    SizedBox(
-                      height: tileHeight,
-                      child: Column(
-                        children: [
-                          SkeletonBone.circle(70 * s),
-                          SizedBox(height: 10 * s),
-                          SkeletonBone(width: 50 * s, height: 10 * s),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+      return ShimmerBox(
+        child: grid([
+          for (var i = 0; i <= _homeCategoryCount; i++)
+            Column(
+              children: [
+                SkeletonBone(
+                  width: double.infinity,
+                  height: imageHeight,
+                  radius: 14 * s,
+                ),
+                SizedBox(height: 10 * s),
+                SkeletonBone(width: 56 * s, height: 10 * s),
+              ],
             ),
-          ),
-        ),
+        ]),
       );
     }
 
     if (widget.services.isEmpty) {
       return Padding(
-        padding: EdgeInsets.symmetric(horizontal: widget.horizontalInset),
+        padding: padding,
         child: _LoadError(scale: s, onRetry: widget.onRetry),
       );
     }
 
-    final count = widget.services.length + 1;
-    return SizedBox(
-      height: height,
-      child: GridView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: widget.horizontalInset),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisExtent: tileWidth,
-          mainAxisSpacing: 8 * s,
-          crossAxisSpacing: spacing,
+    final shown = _homeCategories(widget.services);
+    return grid([
+      for (var index = 0; index < shown.length; index++)
+        _staggered(
+          index,
+          _CategoryTile(
+            service: shown[index],
+            scale: s,
+            imageHeight: imageHeight,
+            onTap: () => widget.onTap(shown[index]),
+          ),
         ),
-        itemCount: count,
-        itemBuilder: (context, index) {
-          // Column-major stagger so the rail fills left to right.
-          final column = index ~/ 2;
-          final start = (column * 0.09 + (index.isOdd ? 0.04 : 0)).clamp(
-            0.0,
-            0.6,
-          );
-          final anim = CurvedAnimation(
-            parent: _enter,
-            curve: Interval(start, start + 0.4, curve: Curves.easeOutBack),
-          );
-          final fade = CurvedAnimation(
-            parent: _enter,
-            curve: Interval(start, start + 0.25, curve: Curves.easeOut),
-          );
-          final tile = index == count - 1
-              ? _SeeAllTile(scale: s, onTap: widget.onSeeAll)
-              : _CategoryTile(
-                  service: widget.services[index],
-                  scale: s,
-                  onTap: () => widget.onTap(widget.services[index]),
-                );
-          return FadeTransition(
-            opacity: fade,
-            child: ScaleTransition(
-              scale: Tween(begin: 0.6, end: 1.0).animate(anim),
-              child: tile,
-            ),
-          );
-        },
+      _staggered(
+        shown.length,
+        _SeeAllTile(scale: s, size: imageHeight, onTap: widget.onSeeAll),
+      ),
+    ]);
+  }
+
+  /// Row-major pop-in so the grid fills left to right, top to bottom.
+  Widget _staggered(int index, Widget tile) {
+    final start = (index * 0.08).clamp(0.0, 0.6);
+    final anim = CurvedAnimation(
+      parent: _enter,
+      curve: Interval(start, start + 0.4, curve: Curves.easeOutBack),
+    );
+    final fade = CurvedAnimation(
+      parent: _enter,
+      curve: Interval(start, start + 0.25, curve: Curves.easeOut),
+    );
+    return FadeTransition(
+      opacity: fade,
+      child: ScaleTransition(
+        scale: Tween(begin: 0.6, end: 1.0).animate(anim),
+        child: tile,
       ),
     );
   }
@@ -183,18 +210,18 @@ class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.service,
     required this.scale,
+    required this.imageHeight,
     required this.onTap,
   });
 
   final ServiceItem service;
   final double scale;
+  final double imageHeight;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final s = scale;
-    final accent = serviceAccent(service.title);
-    final size = 70.0 * s;
     final label = shortServiceTitle(service.title);
 
     return Semantics(
@@ -206,49 +233,27 @@ class _CategoryTile extends StatelessWidget {
           child: Column(
             children: [
               SizedBox(
-                width: size,
-                height: size + 6 * s,
+                height: imageHeight,
                 child: Stack(
                   clipBehavior: Clip.none,
-                  alignment: Alignment.topCenter,
+                  alignment: Alignment.center,
                   children: [
-                    Container(
-                      width: size,
-                      height: size,
-                      padding: EdgeInsets.all(3 * s),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            accent.withValues(alpha: 0.10),
-                            accent.withValues(alpha: 0.28),
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accent.withValues(alpha: 0.16),
-                            blurRadius: 10 * s,
-                            offset: Offset(0, 4 * s),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: ServicePhoto(
-                          service: service,
-                          accent: accent,
-                          iconSize: 30 * s,
-                          cacheWidth: 220,
-                        ),
-                      ),
+                    Image.asset(
+                      _categoryImage(service),
+                      fit: BoxFit.contain,
+                      // Decode at full size: the source is small, and a
+                      // capped cacheWidth upscales blurry on 3x screens.
+                      filterQuality: FilterQuality.medium,
                     ),
                     if (service.supportsInstant)
-                      Positioned(bottom: 0, child: InstantTag(scale: s)),
+                      Positioned(
+                        bottom: -4 * s,
+                        child: InstantTag(scale: s),
+                      ),
                   ],
                 ),
               ),
-              SizedBox(height: 6 * s),
+              SizedBox(height: 10 * s),
               Text(
                 label,
                 maxLines: 1,
@@ -271,15 +276,19 @@ class _CategoryTile extends StatelessWidget {
 }
 
 class _SeeAllTile extends StatelessWidget {
-  const _SeeAllTile({required this.scale, required this.onTap});
+  const _SeeAllTile({
+    required this.scale,
+    required this.size,
+    required this.onTap,
+  });
 
   final double scale;
+  final double size;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final s = scale;
-    final size = 70.0 * s;
     return Semantics(
       button: true,
       label: 'See all categories',
@@ -291,7 +300,6 @@ class _SeeAllTile extends StatelessWidget {
               Container(
                 width: size,
                 height: size,
-                margin: EdgeInsets.only(bottom: 6 * s),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppColors.surfaceTint,
@@ -306,7 +314,7 @@ class _SeeAllTile extends StatelessWidget {
                   size: 24 * s,
                 ),
               ),
-              SizedBox(height: 6 * s),
+              SizedBox(height: 10 * s),
               Text(
                 'See all',
                 style: TextStyle(

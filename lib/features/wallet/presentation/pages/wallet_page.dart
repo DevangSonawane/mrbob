@@ -41,11 +41,93 @@ class WalletPage extends StatelessWidget {
                 );
               },
             ),
+            const SizedBox(height: 36),
+            const _WalletMascot(),
           ],
         ),
       ),
     );
   }
+}
+
+/// Brand mascot filling the empty space under the wallet actions.
+class _WalletMascot extends StatelessWidget {
+  const _WalletMascot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 196,
+          child: Stack(
+            alignment: Alignment.topCenter,
+            children: [
+              // Ground shadow, painted first so the feet overlap it. Centred
+              // on the feet's baseline (~184pt), darkest under the feet
+              // (~90pt span) and fading out past them.
+              const Positioned(
+                bottom: 0,
+                child: CustomPaint(
+                  size: Size(160, 24),
+                  painter: _GroundShadowPainter(),
+                ),
+              ),
+              Image.asset(
+                'assets/mascot/wallet_mascot.webp',
+                height: 190,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                semanticLabel: 'Zingit mascot holding a wallet',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Your money, safe with Zingit',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.brandTeal,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Soft oval ground shadow: a radial gradient squashed into an ellipse, so
+/// it fades evenly to nothing without relying on blur.
+class _GroundShadowPainter extends CustomPainter {
+  const _GroundShadowPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius = size.width / 2;
+    canvas
+      ..translate(radius, size.height / 2)
+      ..scale(1, size.height / size.width);
+    final rect = Rect.fromCircle(center: Offset.zero, radius: radius);
+    canvas.drawOval(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.black.withValues(alpha: 0.34),
+            Colors.black.withValues(alpha: 0.2),
+            Colors.black.withValues(alpha: 0.06),
+            Colors.black.withValues(alpha: 0),
+          ],
+          stops: const [0, 0.42, 0.75, 1],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroundShadowPainter oldDelegate) => false;
 }
 
 class _Header extends StatelessWidget {
