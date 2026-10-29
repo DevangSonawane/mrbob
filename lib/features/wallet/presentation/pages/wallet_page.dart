@@ -56,7 +56,7 @@ class _Header extends StatelessWidget {
     return const Text(
       'My wallet',
       style: TextStyle(
-        color: AppColors.brandForest,
+        color: AppColors.brandTeal,
         fontSize: 23,
         fontWeight: FontWeight.w900,
         letterSpacing: -0.4,
@@ -97,7 +97,7 @@ class _BalanceSummary extends StatelessWidget {
               child: Text(
                 '₹',
                 style: TextStyle(
-                  color: AppColors.brandForest,
+                  color: AppColors.brandTeal,
                   fontSize: 23,
                   fontWeight: FontWeight.w500,
                   height: 1,
@@ -108,7 +108,7 @@ class _BalanceSummary extends StatelessWidget {
             Text(
               '1,490',
               style: TextStyle(
-                color: AppColors.brandForest,
+                color: AppColors.brandTeal,
                 fontSize: 42,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -1.2,
@@ -139,7 +139,7 @@ class _WalletAmountCard extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-              color: AppColors.brandForest,
+              color: AppColors.brandTeal,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -153,7 +153,7 @@ class _WalletAmountCard extends StatelessWidget {
                 child: Text(
                   '₹',
                   style: TextStyle(
-                    color: AppColors.brandForest,
+                    color: AppColors.brandTeal,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     height: 1,
@@ -164,7 +164,7 @@ class _WalletAmountCard extends StatelessWidget {
               Text(
                 amount,
                 style: const TextStyle(
-                  color: AppColors.brandForest,
+                  color: AppColors.brandTeal,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.4,
@@ -194,11 +194,11 @@ class _AddMoneyCard extends StatelessWidget {
         child: Ink(
           height: 52,
           decoration: BoxDecoration(
-            color: const Color(0xFF02462E),
+            color: AppColors.brandTeal,
             borderRadius: BorderRadius.circular(15),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF02462E).withValues(alpha: 0.16),
+                color: AppColors.brandTeal.withValues(alpha: 0.16),
                 blurRadius: 12,
                 offset: const Offset(0, 5),
               ),
@@ -267,7 +267,7 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
                           'Add money',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: AppColors.brandForest,
+                            color: AppColors.brandTeal,
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
@@ -303,7 +303,7 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
                         child: Text(
                           '₹',
                           style: TextStyle(
-                            color: AppColors.brandForest,
+                            color: AppColors.brandTeal,
                             fontSize: 24,
                             fontWeight: FontWeight.w500,
                             height: 1,
@@ -314,7 +314,7 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
                       Text(
                         '$_selectedAmount',
                         style: const TextStyle(
-                          color: AppColors.brandForest,
+                          color: AppColors.brandTeal,
                           fontSize: 44,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -1.2,
@@ -352,7 +352,7 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
                       ),
                       focusedBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
-                          color: Color(0xFF02462E),
+                          color: AppColors.brandTeal,
                           width: 1.4,
                         ),
                       ),
@@ -378,7 +378,7 @@ class _AddMoneyPageState extends State<_AddMoneyPage> {
                 Navigator.pop(context);
               },
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF02462E),
+                backgroundColor: AppColors.brandTeal,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
@@ -428,19 +428,17 @@ class _AmountChip extends StatelessWidget {
                 height: 46,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: selected ? const Color(0xFF02462E) : Colors.white,
+                  color: selected ? AppColors.brandTeal : Colors.white,
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(
                     color: selected
-                        ? const Color(0xFF02462E)
+                        ? AppColors.brandTeal
                         : AppColors.borderSubtle,
                   ),
                   boxShadow: selected
                       ? [
                           BoxShadow(
-                            color: const Color(
-                              0xFF02462E,
-                            ).withValues(alpha: 0.14),
+                            color: AppColors.brandTeal.withValues(alpha: 0.14),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -450,7 +448,7 @@ class _AmountChip extends StatelessWidget {
                 child: Text(
                   '₹$amount',
                   style: TextStyle(
-                    color: selected ? Colors.white : AppColors.brandForest,
+                    color: selected ? Colors.white : AppColors.brandTeal,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),

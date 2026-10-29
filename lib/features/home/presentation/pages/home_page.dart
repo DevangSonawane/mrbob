@@ -286,6 +286,30 @@ class _HomePageState extends State<HomePage> {
                             onTap: (service) => _openService(context, service),
                           ),
                         ],
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalInset,
+                            32 * scale,
+                            horizontalInset,
+                            0,
+                          ),
+                          child: AspectRatio(
+                            // The source logo is square but carries generous
+                            // transparent padding above and below the letters.
+                            // Crop it in-place so the footer remains compact.
+                            aspectRatio: 3.53,
+                            child: ClipRect(
+                              child: FittedBox(
+                                fit: BoxFit.cover,
+                                alignment: const Alignment(0, 0.15),
+                                child: Image.asset(
+                                  'assets/zingit.png',
+                                  semanticLabel: 'ZingIT',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                         SizedBox(height: 108 + bottomInset),
                       ],
                     ),

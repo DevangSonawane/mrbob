@@ -119,7 +119,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: const Text(
                       'Account',
                       style: TextStyle(
-                        color: AppColors.brandForest,
+                        color: AppColors.brandTeal,
                         fontSize: 23,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.4,
@@ -329,7 +329,7 @@ class _ProfileHeader extends StatelessWidget {
               width: avatarSize,
               height: avatarSize,
               decoration: const BoxDecoration(
-                color: Color(0xFF02462E),
+                color: AppColors.brandTeal,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
@@ -365,7 +365,7 @@ class _ProfileHeader extends StatelessWidget {
                   child: Icon(
                     Icons.verified_rounded,
                     size: s(15),
-                    color: AppColors.brandForest,
+                    color: AppColors.brandTeal,
                   ),
                 ),
               ),
@@ -400,7 +400,7 @@ class _ProfileHeader extends StatelessWidget {
                     fontSize: s(20),
                     fontWeight: FontWeight.w700,
                     height: 28 / 20,
-                    color: AppColors.brandForest,
+                    color: AppColors.brandTeal,
                   ),
                 ),
               ),
@@ -529,7 +529,7 @@ class _AccountActionCard extends StatelessWidget {
                     width: s(40),
                     height: s(40),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF02462E),
+                      color: AppColors.brandTeal,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
@@ -544,7 +544,7 @@ class _AccountActionCard extends StatelessWidget {
                       fontSize: s(16),
                       fontWeight: FontWeight.w700,
                       height: 22 / 16,
-                      color: AppColors.brandForest,
+                      color: AppColors.brandTeal,
                     ),
                   ),
                   SizedBox(height: s(4)),
@@ -699,7 +699,7 @@ class _ManageAccountRow extends StatelessWidget {
                 width: s(34),
                 height: s(34),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF02462E),
+                  color: AppColors.brandTeal,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
@@ -713,7 +713,7 @@ class _ManageAccountRow extends StatelessWidget {
                     fontSize: s(15),
                     fontWeight: FontWeight.w700,
                     height: 20 / 15,
-                    color: AppColors.brandForest,
+                    color: AppColors.brandTeal,
                   ),
                 ),
               ),
