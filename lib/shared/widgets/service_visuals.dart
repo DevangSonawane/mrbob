@@ -11,6 +11,20 @@ import '../../core/utils/app_haptics.dart';
 /// and respects reduced motion.
 
 String? categoryAssetPathForTitle(String title) {
+  final lowerTitle = title.toLowerCase();
+
+  // Keep booking imagery aligned with the illustrated category tiles on Home.
+  if (lowerTitle.contains('paint')) return 'assets/fixing/painting.png';
+  if (lowerTitle.contains('pest')) return 'assets/fixing/pestcontrol.png';
+  if (lowerTitle.contains('carpent')) return 'assets/fixing/carpenter.png';
+  if (lowerTitle.contains('electric')) return 'assets/fixing/electricity.png';
+  if (lowerTitle.contains('ac repair') || lowerTitle.contains('ac servic')) {
+    return 'assets/fixing/appliancerepair.png';
+  }
+  if (lowerTitle.contains('applian')) {
+    return 'assets/fixing/appliancerepair.png';
+  }
+
   return switch (_normalizeTitle(title)) {
     'plumber' || 'plumbing' => 'assets/service_cat/plumbing.png',
     'electrician' || 'electrical' => 'assets/service_cat/electrician.png',
