@@ -124,10 +124,10 @@ class _MainShellState extends State<MainShell> {
       child: GlassScaffold(
         backgroundColor: Colors.white,
         extendBody: true,
-        // Keep the system-style edge treatment tight to the pill: it protects
-        // icon legibility without turning the bottom of the page into a slab.
-        bottomEdgeFade: true,
-        bottomEdgeFadeExtent: -12,
+        // No bottom fade: it erased the page before it reached the pill, so
+        // the glass only ever sat on flat white and read as a plain card.
+        // iOS 26/27 tab bars let content scroll visibly through the glass.
+        bottomEdgeFade: false,
         body: screens[tab],
         bottomBar: GlassAdaptiveScope(
           // This is the app's one persistent navigation surface. Give it the
@@ -158,11 +158,29 @@ class _MainShellState extends State<MainShell> {
               verticalPadding: 18,
               quality: GlassQuality.premium,
               backgroundQuality: GlassQuality.premium,
-              // Keep the resting glass neutral. A small prismatic edge appears
-              // only once the user actively drags across the navigation pill.
+              // iOS 26/27 "regular" tab-bar glass on a light page: a faint
+              // milky body, light frost, a thick bevel that bends what
+              // scrolls beneath, a bright lit rim and a lifted shadow so the
+              // pill floats. chromaticAberration drives the prism: an RGB split
+              // of what shows through plus a cyan/violet/amber thin-film
+              // reflection on the rim. Below ~0.25 it vanishes on a white
+              // page, so it sits visibly at rest and blooms on drag.
               settings: LiquidGlassSettings(
-                chromaticAberration: _isNavDragging ? 0.12 : 0,
+                glassColor: Colors.white.withValues(alpha: 0.14),
+                blur: 6,
+                thickness: 32,
+                refractiveIndex: 1.35,
+                saturation: 1.8,
+                lightIntensity: 0.9,
+                ambientRim: 0.25,
+                whitenStrength: 0.12,
+                shadowElevation: 2.2,
+                chromaticAberration: _isNavDragging ? 0.85 : 0.5,
               ),
+              // The selection pill is its own lens, and the package zeroes
+              // its prism by default; give it the same rainbow rim.
+              indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings
+                  .copyWith(chromaticAberration: _isNavDragging ? 0.9 : 0.45),
               selectedIconColor: AppColors.brandForest,
               unselectedIconColor: AppColors.mutedText,
               showIndicator: true,

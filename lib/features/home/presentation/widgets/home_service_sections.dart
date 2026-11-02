@@ -244,16 +244,20 @@ class _CategoryTile extends StatelessWidget {
                   clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
-                    Image.asset(
-                      _categoryImage(service),
-                      fit: BoxFit.contain,
-                      // Decode at the tile's real pixel height: the 1600px
-                      // sources are wasteful at full size, and a fixed small
-                      // cache upscales blurry on 3x screens.
-                      cacheHeight:
-                          (imageHeight * MediaQuery.devicePixelRatioOf(context))
-                              .round(),
-                      filterQuality: FilterQuality.medium,
+                    Transform.scale(
+                      scale: 1.16,
+                      child: Image.asset(
+                        _categoryImage(service),
+                        fit: BoxFit.contain,
+                        // Decode at the tile's real pixel height: the 1600px
+                        // sources are wasteful at full size, and a fixed small
+                        // cache upscales blurry on 3x screens.
+                        cacheHeight:
+                            (imageHeight *
+                                    MediaQuery.devicePixelRatioOf(context))
+                                .round(),
+                        filterQuality: FilterQuality.medium,
+                      ),
                     ),
                     if (service.supportsInstant)
                       Positioned(
