@@ -26,8 +26,14 @@ const _homeColumns = 3;
 /// Home tile artwork; categories without their own image use the AC unit.
 String _categoryImage(ServiceItem service) {
   final title = service.title.toLowerCase();
-  if (title.contains('paint')) return 'assets/service_cat/painting_can.png';
-  if (title.contains('pest')) return 'assets/service_cat/pest_control.png';
+  if (title.contains('paint')) return 'assets/fixing/painting.png';
+  if (title.contains('pest')) return 'assets/fixing/pestcontrol.png';
+  if (title.contains('carpent')) return 'assets/fixing/carpenter.png';
+  if (title.contains('electric')) return 'assets/fixing/electricity.png';
+  if (title.contains('ac repair') || title.contains('ac servic')) {
+    return 'assets/fixing/appliancerepair.png';
+  }
+  if (title.contains('applian')) return 'assets/fixing/appliancerepair.png';
   return 'assets/service_cat/ac_unit.png';
 }
 
@@ -241,8 +247,12 @@ class _CategoryTile extends StatelessWidget {
                     Image.asset(
                       _categoryImage(service),
                       fit: BoxFit.contain,
-                      // Decode at full size: the source is small, and a
-                      // capped cacheWidth upscales blurry on 3x screens.
+                      // Decode at the tile's real pixel height: the 1600px
+                      // sources are wasteful at full size, and a fixed small
+                      // cache upscales blurry on 3x screens.
+                      cacheHeight:
+                          (imageHeight * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
                       filterQuality: FilterQuality.medium,
                     ),
                     if (service.supportsInstant)

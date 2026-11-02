@@ -5,6 +5,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
@@ -247,7 +248,7 @@ class _HomePageState extends State<HomePage> {
                             horizontalInset,
                             30 * scale,
                             horizontalInset,
-                            18 * scale,
+                            28 * scale,
                           ),
                           child: const CapsSectionHeader(
                             title: 'What needs fixing?',
@@ -272,7 +273,7 @@ class _HomePageState extends State<HomePage> {
                               horizontalInset,
                               30 * scale,
                               horizontalInset,
-                              16 * scale,
+                              26 * scale,
                             ),
                             child: const CapsSectionHeader(
                               title: 'Popular right now',
@@ -1082,7 +1083,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
             padding: const EdgeInsets.only(left: 8),
             child: Text(
               title,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: AppColors.brandForest,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
@@ -1140,7 +1141,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           children: [
             GlassIconButton(
               icon: const Icon(
-                LucideIcons.messageSquareText,
+                LucideIcons.messageCircle,
                 color: AppColors.brandForest,
               ),
               onPressed: _startingListen
@@ -1391,9 +1392,9 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
                     borderRadius: BorderRadius.circular(15),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'Back',
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
                   ),
@@ -1414,10 +1415,10 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
                   _BookingPrepAction.continueBooking,
                   _textController.text.trim(),
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
                     'Continue',
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
                       fontSize: 14,

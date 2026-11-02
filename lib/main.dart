@@ -44,13 +44,13 @@ Future<void> main() async {
         thickness: 25,
         quality: GlassQuality.standard,
       ),
-      child: MrBobApp(hasSession: hasSession),
+      child: ZingitApp(hasSession: hasSession),
     ),
   );
 }
 
-class MrBobApp extends StatelessWidget {
-  const MrBobApp({super.key, required this.hasSession});
+class ZingitApp extends StatelessWidget {
+  const ZingitApp({super.key, required this.hasSession});
 
   final bool hasSession;
 
@@ -58,7 +58,7 @@ class MrBobApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'MrBob',
+      title: 'Zingit',
       theme: AppTheme.light,
       home: hasSession ? const MainShell() : const LoginPage(),
     );
