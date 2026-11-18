@@ -23,6 +23,7 @@ class CustomerAddress {
     this.isDefault = false,
     this.contactName,
     this.contactPhone,
+    this.serviceable = true,
   });
 
   final String id;
@@ -39,6 +40,10 @@ class CustomerAddress {
   final bool isDefault;
   final String? contactName;
   final String? contactPhone;
+
+  /// False when the backend says we don't serve this area yet. Missing on
+  /// older responses, which are treated as serviceable.
+  final bool serviceable;
 
   /// True when the address carries a position, so H3 dispatch can
   /// match it against nearby vendors.
@@ -72,6 +77,7 @@ class CustomerAddress {
       isDefault: json['isDefault'] == true,
       contactName: json['contactName']?.toString(),
       contactPhone: json['contactPhone']?.toString(),
+      serviceable: json['serviceable'] != false,
     );
   }
 
@@ -115,6 +121,7 @@ class CustomerAddress {
     bool? isDefault,
     String? contactName,
     String? contactPhone,
+    bool? serviceable,
   }) {
     return CustomerAddress(
       id: id ?? this.id,
@@ -131,6 +138,7 @@ class CustomerAddress {
       isDefault: isDefault ?? this.isDefault,
       contactName: contactName ?? this.contactName,
       contactPhone: contactPhone ?? this.contactPhone,
+      serviceable: serviceable ?? this.serviceable,
     );
   }
 

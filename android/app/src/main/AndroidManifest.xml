@@ -44,6 +44,12 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Android 11+ package visibility: without this the speech
+             recogniser is invisible to the app and voice input reports
+             "unavailable". -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

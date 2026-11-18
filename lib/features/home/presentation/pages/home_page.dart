@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -8,16 +7,19 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../../core/data/services_data.dart';
-import '../../../../shared/widgets/voice_beam.dart';
+import '../../../../shared/widgets/pulse_rings.dart';
+import '../../../../core/models/api/booking_draft.dart';
 import '../../../../core/models/api/service_category.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/models/service_item.dart';
 import '../../../../core/services/api_config.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../core/services/address_service.dart';
+import '../../../../core/services/booking_assistant_service.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/services/onboarding_service.dart';
@@ -25,6 +27,8 @@ import '../../../../core/services/token_store.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../amc/presentation/pages/amc_page.dart';
+import '../../../booking/presentation/pages/booking_assistant_page.dart';
+import '../../../booking/presentation/pages/voice_assistant_page.dart';
 import '../../../booking/presentation/widgets/vendors_nearby_card.dart';
 import '../../../shell/presentation/pages/main_shell.dart';
 import 'all_services_page.dart';
@@ -195,6 +199,27 @@ class _HomePageState extends State<HomePage> {
     final scale = (width / 430).clamp(0.78, 0.92);
     final horizontalInset = (22.0 * scale).clamp(18.0, 22.0).toDouble();
 
+    // Assistant mic badge, pinned to the right just above the shell's nav
+    // pill (62 bar + 18 padding). Always shown — if the assistant is down,
+    // the flow itself falls back to the service list.
+    return Stack(
+      children: [
+        _buildScaffold(context, scale, horizontalInset, bottomInset),
+        Positioned(
+          right: horizontalInset - 4,
+          bottom: bottomInset + 62 + 18 + 6,
+          child: _FloatingAssistantMic(onTap: () => _openAssistant(context)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    double scale,
+    double horizontalInset,
+    double bottomInset,
+  ) {
     return Scaffold(
       backgroundColor: _homeHeaderColor,
       // SafeArea keeps the scroll viewport below the status bar / notch /
@@ -324,14 +349,50 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openService(BuildContext context, ServiceItem service) async {
+  /// Booking assistant: the full-screen voice page captures the problem
+  /// (speak or type), then the assistant drafts the booking for review.
+  /// Every exit offers the normal service list.
+  Future<void> _openAssistant(BuildContext context) async {
+    AppHaptics.press();
+    final result = await showVoiceAssistant(context);
+    if (!context.mounted || result == null) return;
+    switch (result.action) {
+      case VoiceAssistantAction.chooseService:
+        await _openAllCategories(context, prefill: result.text);
+      case VoiceAssistantAction.continueBooking:
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BookingAssistantPage(
+              message: result.text,
+              source: result.source,
+              services: _services,
+              onBooked: widget.onBooked,
+              onChooseService: (ctx, prefill) =>
+                  _openAllCategories(ctx, prefill: prefill),
+            ),
+          ),
+        );
+    }
+  }
+
+  Future<void> _openService(
+    BuildContext context,
+    ServiceItem service, {
+    String prefill = '',
+  }) async {
     AppHaptics.press();
     final selectedSlot = await _showSlotPicker(context, service);
     if (!context.mounted || selectedSlot == null) {
       return;
     }
 
-    final prep = await _showBookingPrepDialog(context, service);
+    final prep = await _showBookingPrepDialog(
+      context,
+      service,
+      initialText: prefill,
+      startMode: prefill.isEmpty ? _PrepMode.options : _PrepMode.describe,
+    );
     if (!context.mounted) {
       return;
     }
@@ -356,8 +417,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<_BookingPrepData?> _showBookingPrepDialog(
     BuildContext context,
-    ServiceItem service,
-  ) {
+    ServiceItem? service, {
+    String initialText = '',
+    _PrepMode startMode = _PrepMode.options,
+  }) {
     // Liquid glass bottom dialog (skill §5 + vendor
     // glass_modal_sheet_demo.dart): the sheet owns the refractive surface
     // and snaps half <-> full as the dialog morphs between the compact
@@ -404,18 +467,23 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => _BookingPrepDialog(
         service: service,
         sheetController: sheetController,
+        initialText: initialText,
+        startMode: startMode,
       ),
     );
   }
 
-  Future<void> _openAllCategories(BuildContext context) {
+  /// [prefill] carries the assistant text into the picked service's
+  /// problem description, so nothing the customer said is lost.
+  Future<void> _openAllCategories(BuildContext context, {String prefill = ''}) {
     return Navigator.push<void>(
       context,
       MaterialPageRoute(
         settings: const RouteSettings(name: _allCategoriesRouteName),
         builder: (_) => AllServicesPage(
           services: _services,
-          onServiceSelected: _openService,
+          onServiceSelected: (ctx, service) =>
+              _openService(ctx, service, prefill: prefill),
         ),
       ),
     );
@@ -645,15 +713,23 @@ class _SelectedSlot {
   String get label => '$day, $time';
 }
 
-enum _BookingPrepAction { continueBooking, cancel }
+enum _BookingPrepAction { continueBooking, chooseService, cancel }
 
 /// Result of the problem-description step: what to do next, plus the typed
 /// or dictated description (empty when the user continues without typing).
 class _BookingPrepData {
-  const _BookingPrepData(this.action, this.description);
+  const _BookingPrepData(
+    this.action,
+    this.description, {
+    this.source = DraftSource.text,
+  });
 
   final _BookingPrepAction action;
   final String description;
+
+  /// VOICE when the text came from the mic, so the booking assistant
+  /// allows for transcription mistakes.
+  final DraftSource source;
 }
 
 enum _PrepMode { options, listening, describe }
@@ -662,10 +738,16 @@ class _BookingPrepDialog extends StatefulWidget {
   const _BookingPrepDialog({
     required this.service,
     required this.sheetController,
+    this.initialText = '',
+    this.startMode = _PrepMode.options,
   });
 
-  final ServiceItem service;
+  /// The service already picked. Null = booking assistant mode: the
+  /// customer describes the problem and the assistant picks the service.
+  final ServiceItem? service;
   final GlassModalSheetController sheetController;
+  final String initialText;
+  final _PrepMode startMode;
 
   @override
   State<_BookingPrepDialog> createState() => _BookingPrepDialogState();
@@ -688,6 +770,17 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   bool _startingListen = false;
   String _liveTranscript = '';
 
+  bool get _assistant => widget.service == null;
+
+  /// Speech recognition denied/unavailable: the mic is hidden and the
+  /// customer types instead (assistant mode never plays the demo stream —
+  /// scripted words would be sent as a real problem).
+  bool _micUnavailable = false;
+
+  /// Last transcript loaded from the mic. The text is sent as VOICE while
+  /// it still mostly matches what was heard.
+  String? _voiceText;
+
   /// Live voice level (0..1) driving the thinking orb. A ValueNotifier so
   /// mic ticks repaint ONLY the orb — not the whole sheet (that full
   /// ListView rebuild on every level callback was the jank).
@@ -699,10 +792,10 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   /// arrives, so the visuals never sit dead on slower devices.
   Timer? _idleWaveTimer;
 
-  /// Demo fallback when the recognizer is unavailable (denied/simulator):
-  /// streams sample words + synthetic levels so the beam + word-by-word
-  /// still play exactly as with a live mic.
-  Timer? _demoTimer;
+  /// Recogniser locale, resolved once: en-IN when the device has it,
+  /// otherwise the system default (forcing a missing locale makes iOS fail
+  /// and Android fall back to poor matching).
+  static String? _localeId;
 
   /// Fires once if a live session hears nothing useful, so the UI can
   /// say so instead of hanging on "Listening…" forever.
@@ -718,31 +811,16 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   Timer? _settleTimer;
   bool _settling = false;
 
-  /// One full beam travel, matched to VoiceBeam.processingDuration.
-  static const _settleDelay = Duration(milliseconds: 1100);
-  static const _demoWords = <String>[
-    'My',
-    'kitchen',
-    'tap',
-    'is',
-    'leaking',
-    'and',
-    'I',
-    'need',
-    'a',
-    'plumber',
-    'tomorrow',
-    'morning',
-  ];
+  /// A take is being finalised; `done` arriving after our own stop() must
+  /// not finish it a second time.
+  bool _finishing = false;
+
+  /// Short "got it" beat in the pulse's thinking state before the editor.
+  static const _settleDelay = Duration(milliseconds: 900);
 
   void _stopIdleWave() {
     _idleWaveTimer?.cancel();
     _idleWaveTimer = null;
-  }
-
-  void _stopDemo() {
-    _demoTimer?.cancel();
-    _demoTimer = null;
   }
 
   void _disarmNoSpeechHint() {
@@ -766,23 +844,6 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     });
   }
 
-  /// Mic unavailable: play the same UI with scripted words + levels.
-  void _startDemoStream() {
-    _stopIdleWave();
-    _stopDemo();
-    var i = 0;
-    _demoTimer = Timer.periodic(const Duration(milliseconds: 340), (_) {
-      if (!mounted || _mode != _PrepMode.listening) return;
-      final t = DateTime.now().millisecondsSinceEpoch / 1000;
-      // Synthetic voice dynamics drive the beam like real mic levels.
-      _voiceLevel.value = (0.35 + 0.3 * math.sin(t * 5.1) * math.sin(t * 2.3))
-          .clamp(0.0, 1.0);
-      if (i < _demoWords.length) {
-        setState(() => _liveTranscript = _demoWords.sublist(0, ++i).join(' '));
-      }
-    });
-  }
-
   void _startIdleWave() {
     _stopIdleWave();
     _idleWaveTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
@@ -795,19 +856,73 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     });
   }
 
-  /// Silent failure exit: back to the circles, no error text.
-  void _abortListen() {
+  /// Failure exit: back to the circles with a short hint.
+  void _abortListen([String? hint]) {
     _stopIdleWave();
-    _stopDemo();
     _disarmNoSpeechHint();
-    _speech.stop();
+    _speech.cancel();
     if (!mounted) {
       return;
     }
     setState(() {
       _startingListen = false;
       _mode = _PrepMode.options;
+      _optionsHint = hint;
     });
+  }
+
+  /// One-line hint under the circles after a failed take.
+  String? _optionsHint;
+
+  /// Recogniser error. Whatever was already heard is kept — "no match" or
+  /// a speech timeout after a few words is the normal end of a take on
+  /// Android, not a reason to throw the words away.
+  void _handleSpeechError(SpeechRecognitionError error) {
+    if (!mounted || _mode != _PrepMode.listening) return;
+    final msg = error.errorMsg;
+    if (msg.contains('permission')) {
+      _fallBackToTyping();
+      return;
+    }
+    if (_liveTranscript.trim().isNotEmpty) {
+      _finishListening(auto: true);
+      return;
+    }
+    _abortListen(
+      msg.contains('network')
+          ? 'Voice needs an internet connection. Try again or type it.'
+          : "Didn't catch that — tap the mic and try again.",
+    );
+  }
+
+  void _handleSpeechStatus(String status) {
+    // Only `done` ends a take: on Android `notListening` arrives BEFORE the
+    // final result, so stopping there dropped the last words.
+    if (status == 'done' && mounted && _mode == _PrepMode.listening) {
+      _finishListening(auto: true);
+    }
+  }
+
+  Future<String?> _resolveLocale() async {
+    if (_localeId != null) return _localeId;
+    try {
+      final locales = await _speech.locales();
+      String? match(bool Function(String id) test) {
+        for (final l in locales) {
+          if (test(l.localeId.replaceAll('-', '_').toLowerCase())) {
+            return l.localeId;
+          }
+        }
+        return null;
+      }
+
+      _localeId =
+          match((id) => id == 'en_in') ??
+          (await _speech.systemLocale())?.localeId;
+    } catch (_) {
+      _localeId = null;
+    }
+    return _localeId;
   }
 
   void _handleSoundLevel(double level) {
@@ -856,17 +971,71 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       vsync: this,
       duration: const Duration(seconds: 9),
     )..repeat();
+    _textController.text = widget.initialText;
+    _textController.addListener(_onTextChanged);
+    switch (widget.startMode) {
+      case _PrepMode.describe:
+        _mode = _PrepMode.describe;
+        _autofocusEditor = widget.initialText.isEmpty;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            widget.sheetController.snapToState(GlassSheetState.full);
+          }
+        });
+      case _PrepMode.listening:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _startListening();
+        });
+      case _PrepMode.options:
+        break;
+    }
+  }
+
+  void _onTextChanged() {
+    // Rebuild only for the Continue enable/disable threshold.
+    if (_assistant && mounted) setState(() {});
+  }
+
+  DraftSource get _source {
+    final heard = _voiceText;
+    if (heard == null || heard.isEmpty) return DraftSource.text;
+    final now = _textController.text.trim();
+    // Heavily rewritten after dictation reads as typed text.
+    final kept = heard.split(RegExp(r'\s+')).where(now.contains).length;
+    final total = heard.split(RegExp(r'\s+')).length;
+    return kept / total >= 0.5 ? DraftSource.voice : DraftSource.text;
+  }
+
+  /// Mic denied / no recogniser: hide it and go straight to typing.
+  void _fallBackToTyping() {
+    _stopIdleWave();
+    _disarmNoSpeechHint();
+    _speech.cancel();
+    if (!mounted) return;
+    setState(() {
+      _micUnavailable = true;
+      _startingListen = false;
+    });
+    _openEditor();
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Voice isn't available — allow microphone access in Settings, "
+          'or type your problem.',
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _stopIdleWave();
-    _stopDemo();
     _disarmNoSpeechHint();
     _stopSettle();
     _voiceLevel.dispose();
     _fluidController.dispose();
     _speech.stop();
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     super.dispose();
   }
@@ -887,34 +1056,33 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       _mode = _PrepMode.listening;
       _liveTranscript = '';
       _showNoSpeechHint = false;
+      _optionsHint = null;
+      _finishing = false;
     });
     // The sheet stays on its medium detent — tapping the mic must not resize
     // the stage. The gradient simply hands off to the opaque white fill.
     _startIdleWave();
     try {
-      final available = await _speech.initialize(
-        onStatus: (status) {
-          // Engine idled on its own (e.g. pause timeout): fold whatever was
-          // heard into the editor instead of hanging on the listening view.
-          if ((status == 'done' || status == 'notListening') &&
-              mounted &&
-              _mode == _PrepMode.listening) {
-            _finishListening(auto: true);
-          }
-        },
-        onError: (error) {
-          _abortListen();
-        },
-      );
+      // SpeechToText is a process-wide singleton: initialize() only wires
+      // callbacks the FIRST time, so later sheets kept talking to a disposed
+      // State (auto-stop and errors silently stopped working). Re-point the
+      // listeners at this sheet on every take.
+      _speech.statusListener = _handleSpeechStatus;
+      _speech.errorListener = _handleSpeechError;
+      final available =
+          _speech.isAvailable ||
+          await _speech.initialize(
+            onStatus: _handleSpeechStatus,
+            onError: _handleSpeechError,
+          );
       if (!available) {
-        // No recognizer (simulator/denied): demo the identical UI so the
-        // beam + word-by-word can still be reviewed.
-        if (!mounted) return;
-        setState(() => _startingListen = false);
-        _startDemoStream();
+        // No recogniser or mic denied: never fake a transcript — type it.
+        _fallBackToTyping();
         return;
       }
-      if (!mounted) {
+      if (_speech.isListening) await _speech.cancel();
+      final localeId = await _resolveLocale();
+      if (!mounted || _mode != _PrepMode.listening) {
         return;
       }
       setState(() => _startingListen = false);
@@ -923,16 +1091,24 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
           if (!mounted) {
             return;
           }
+          if (_mode != _PrepMode.listening) return;
           // Every partial streams in word-by-word; finals just keep the
           // words on screen and keep listening until pause/Stop.
-          setState(() => _liveTranscript = result.recognizedWords);
+          final words = result.recognizedWords;
+          if (words.trim().isEmpty) return;
+          setState(() => _liveTranscript = words);
         },
         onSoundLevelChange: _handleSoundLevel,
         listenOptions: SpeechListenOptions(
+          // English (India) when installed, else the device default.
+          localeId: localeId,
+          // Free-form sentences, not short commands.
+          listenMode: ListenMode.dictation,
           listenFor: const Duration(seconds: 60),
-          pauseFor: const Duration(seconds: 4),
+          // A natural pause mid-sentence must not end the take.
+          pauseFor: const Duration(seconds: 3),
           partialResults: true,
-          cancelOnError: true,
+          cancelOnError: false,
         ),
       );
       // If the engine hears nothing (routed mic, offline recognizer),
@@ -942,11 +1118,7 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       if (!mounted) {
         return;
       }
-      await _speech.stop();
-      setState(() {
-        _startingListen = false;
-        _mode = _PrepMode.options;
-      });
+      _abortListen("Couldn't start the microphone. Try again or type it.");
     }
   }
 
@@ -957,15 +1129,22 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
     // Auto-stop glides back on its own; only the manual "use recording" tap
     // deserves a haptic.
     if (!auto) AppHaptics.confirm();
+    if (_settling || _finishing) return;
+    _finishing = true;
     _stopIdleWave();
-    _stopDemo();
     _disarmNoSpeechHint();
-    await _speech.stop();
-    if (!mounted) {
+    if (_speech.isListening) {
+      await _speech.stop();
+      // stop() asks the engine to finalise; the last words arrive as one
+      // more result right after, so wait for them before reading.
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+    }
+    if (!mounted || _mode != _PrepMode.listening) {
       return;
     }
     final heard = _liveTranscript.trim();
     if (heard.isNotEmpty) {
+      _voiceText = heard;
       _textController.text = heard;
       _textController.selection = TextSelection.fromPosition(
         TextPosition(offset: _textController.text.length),
@@ -990,13 +1169,19 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       return;
     }
     // Engine stopped on its own without hearing anything.
-    setState(() => _mode = _PrepMode.options);
+    setState(() {
+      _mode = _PrepMode.options;
+      _optionsHint = "Didn't catch that — tap the mic and try again.";
+    });
   }
 
   void _close(_BookingPrepAction action, [String description = '']) {
     AppHaptics.press();
     _speech.stop();
-    Navigator.pop(context, _BookingPrepData(action, description));
+    Navigator.pop(
+      context,
+      _BookingPrepData(action, description, source: _source),
+    );
   }
 
   @override
@@ -1158,77 +1343,108 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
               ),
               semanticLabel: 'Describe the problem by text',
             ),
-            const SizedBox(width: 28),
-            GlassIconButton(
-              icon: _startingListen
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(LucideIcons.mic, color: Colors.white),
-              onPressed: _startingListen ? null : _startListening,
-              useOwnLayer: true,
-              size: 68,
-              iconSize: 26,
-              settings: const LiquidGlassSettings(glassColor: Colors.black),
-              semanticLabel: 'Describe the problem by voice',
-            ),
+            if (!_micUnavailable) ...[
+              const SizedBox(width: 28),
+              GlassIconButton(
+                icon: _startingListen
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.mic, color: Colors.white),
+                onPressed: _startingListen ? null : _startListening,
+                useOwnLayer: true,
+                size: 68,
+                iconSize: 26,
+                settings: const LiquidGlassSettings(glassColor: Colors.black),
+                semanticLabel: 'Describe the problem by voice',
+              ),
+            ],
           ],
         ),
+        if (_optionsHint != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _optionsHint!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              color: AppColors.mutedText,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ],
+        if (_assistant) ...[
+          const SizedBox(height: 14),
+          _buildChooseServiceLink(),
+        ],
         const SizedBox(height: 8),
       ],
     );
   }
 
-  /// Live listening stage — exact libraries.dev/voice layout: the glow
-  /// wraps the chat box itself (no orb), transcript streams word-by-word
-  /// inside it. Mic ticks repaint only the beam via [_voiceLevel].
+  /// Live listening stage: ZingIT's own pulse graphic reacting to the
+  /// voice, with the transcript streaming word-by-word in a cream card
+  /// under it. Mic ticks repaint only the pulse via [_voiceLevel].
   Widget _buildListening({Key? key}) {
+    final thinking = _startingListen || _settling;
     return Column(
       key: key,
       mainAxisAlignment: MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        VoiceBeam(
-          levelListenable: _voiceLevel,
-          // Sweeps while the mic opens AND through the settle pass after the
-          // recogniser finalises — the only moment the travel is visible.
-          processing: _startingListen || _settling,
-          type: VoiceBeamType.standard,
-          // Brand palette rather than the upstream rainbow: on a pale glass
-          // panel a saturated forest/gold beam reads as ours, where the
-          // multi-hue one turns to confetti.
-          colorVariant: VoiceBeamColorVariant.forest,
-          theme: VoiceBeamTheme.light,
-          borderRadius: 22,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            // Frosted panel, not a black box: the transcript reads as app text
-            // on glass, and the beam has a real surface to sit on.
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                constraints: const BoxConstraints(
-                  minHeight: 132,
-                  maxHeight: 172,
-                ),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.62),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    width: 1,
-                  ),
-                ),
-                child: _buildLiveTranscript(),
+        Center(
+          child: PulseRings(
+            coreSize: 72,
+            spread: 2.0,
+            color: AppColors.brandGold,
+            levelListenable: thinking ? null : _voiceLevel,
+            period: const Duration(milliseconds: 1600),
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.brandForest,
+              ),
+              child: Icon(
+                thinking ? LucideIcons.check : LucideIcons.mic,
+                color: AppColors.brandGold,
+                size: 28,
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _startingListen
+              ? 'Opening the mic…'
+              : _settling
+              ? 'Got it'
+              : 'Listening — tell us what\'s wrong',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: AppColors.brandForest,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.none,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          constraints: const BoxConstraints(minHeight: 96, maxHeight: 140),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceTint,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: _buildLiveTranscript(),
         ),
         const SizedBox(height: 16),
         Row(
@@ -1328,9 +1544,8 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
   void _cancelListening() {
     AppHaptics.press();
     _stopIdleWave();
-    _stopDemo();
     _disarmNoSpeechHint();
-    _speech.stop();
+    _speech.cancel();
     _voiceLevel.value = 0;
     if (!mounted) {
       return;
@@ -1352,13 +1567,38 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 16),
-        _buildHeader(title: 'State your problem'),
+        _buildHeader(
+          title: _assistant ? 'Describe your problem' : 'State your problem',
+        ),
+        if (_assistant) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              "Say what's wrong, where in the house, and when you'd like "
+              'someone to come.',
+              style: GoogleFonts.poppins(
+                color: AppColors.mutedText,
+                fontSize: 12.5,
+                height: 1.4,
+                fontWeight: FontWeight.w400,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: GlassTextField(
             controller: _textController,
-            placeholder: 'Write here…',
+            placeholder: _assistant
+                ? 'e.g. Water is leaking under my kitchen sink since '
+                      'morning. Can someone come tomorrow evening?'
+                : 'Write here…',
+            maxLength: _assistant
+                ? BookingAssistantService.maxMessageLength
+                : null,
             minLines: 5,
             maxLines: 8,
             autofocus: _autofocusEditor,
@@ -1411,6 +1651,10 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
                 settings: const LiquidGlassSettings(
                   glassColor: AppColors.brandForest,
                 ),
+                enabled:
+                    !_assistant ||
+                    _textController.text.trim().length >=
+                        BookingAssistantService.minMessageLength,
                 onTap: () => _close(
                   _BookingPrepAction.continueBooking,
                   _textController.text.trim(),
@@ -1430,7 +1674,32 @@ class _BookingPrepDialogState extends State<_BookingPrepDialog>
             ),
           ],
         ),
+        if (_assistant) ...[
+          const SizedBox(height: 10),
+          _buildChooseServiceLink(),
+        ],
       ],
+    );
+  }
+
+  /// Assistant fallback, always one tap away: the normal service list.
+  Widget _buildChooseServiceLink() {
+    return Center(
+      child: TextButton(
+        onPressed: () => _close(
+          _BookingPrepAction.chooseService,
+          _textController.text.trim(),
+        ),
+        style: TextButton.styleFrom(foregroundColor: AppColors.brandTeal),
+        child: Text(
+          'Choose a service yourself',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 13.5,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2855,6 +3124,61 @@ class _LocationBarState extends State<_LocationBar> {
           child: Icon(LucideIcons.user, color: Colors.white, size: 24 * scale),
         ),
       ],
+    );
+  }
+}
+
+/// The assistant's home entry: a forest mic badge with a gold glow and a
+/// soft ring pulsing out of it, stuck to the right just above the nav pill.
+class _FloatingAssistantMic extends StatelessWidget {
+  const _FloatingAssistantMic({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const core = 52.0;
+    return Semantics(
+      button: true,
+      label: 'Describe your problem by voice',
+      child: GestureDetector(
+        onTap: onTap,
+        child: PulseRings(
+          coreSize: core,
+          spread: 1.45,
+          color: AppColors.brandGold,
+          rings: 2,
+          child: Container(
+            width: core,
+            height: core,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1C3A1C), AppColors.brandForest],
+              ),
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandGold.withValues(alpha: 0.40),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: AppColors.brandForest.withValues(alpha: 0.30),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Icon(
+              LucideIcons.mic,
+              color: AppColors.brandGold,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
