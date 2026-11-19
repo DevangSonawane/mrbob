@@ -6,7 +6,7 @@ class ApiConfig {
   ApiConfig._();
 
   static const baseUrl =
-      'https://home-services-backend-7cyx.onrender.com/api/v1';
+      'https://home-services-backend-zvm2.onrender.com/api/v1';
 
   /// Flip to true to point at a locally running backend.
   static const useLocalhost = false;

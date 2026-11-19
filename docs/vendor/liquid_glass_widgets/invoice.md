@@ -2,8 +2,8 @@ Customer Invoices
 Mr Bob customer app - API guide
 How the customer app shows the invoice for a completed booking: as data for an invoice screen, and as a PDF the
 customer can open, download or share.
-Base URL https://home-services-backend-7cyx.onrender.com/api/v1
-Live reference (try any call) https://home-services-backend-7cyx.onrender.com/api-docs
+Base URL https://home-services-backend-zvm2.onrender.com/api/v1
+Live reference (try any call) https://home-services-backend-zvm2.onrender.com/api-docs
 Version 18 October 2026
 CONTENTS
 Before you start
@@ -15,7 +15,7 @@ Before you start
 Who can call these. The signed-in customer, for their own bookings. Send Authorization: Bearer
 <accessToken> (the token from the customer's OTP sign-in). Paths are relative to the base URL, so GET
 /customer/bookings/{id}/invoice means GET
-https://home-services-backend-7cyx.onrender.com/api/v1/customer/bookings/{id}/invoice.
+https://home-services-backend-zvm2.onrender.com/api/v1/customer/bookings/{id}/invoice.
 When there is an invoice. One invoice per booking, issued the moment the job is completed, whether the vendor
 completes it with the customer's code or the team marks it completed. Bookings completed earlier have one too.
 Show the invoice option on a booking once its status is COMPLETED; before that, and for someone else's booking,

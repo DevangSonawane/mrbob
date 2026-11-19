@@ -4,7 +4,7 @@ The customer explains their problem in their own words, by typing or by speaking
 
 - **Backend:** already live (`POST /bookings/draft`). No new backend work is needed.
 - **Full API reference:** Swagger at `<server>/api-docs` → **Booking flow** → "Describe the problem, get a booking draft".
-- **Server:** `https://home-services-backend-7cyx.onrender.com/api/v1` (local development: `http://localhost:4000/api/v1`). All paths below are relative to this.
+- **Server:** `https://home-services-backend-zvm2.onrender.com/api/v1` (local development: `http://localhost:4000/api/v1`). All paths below are relative to this.
 
 ---
 
